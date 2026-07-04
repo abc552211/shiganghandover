@@ -16,6 +16,29 @@
 </head>
 <body class="p-2 md:p-6 min-h-[100dvh] flex flex-col items-center">
 
+    <div id="authLockScreen" class="fixed inset-0 bg-slate-900 bg-opacity-95 z-[99] flex items-center justify-center p-4 hidden">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 text-center">
+            <h2 class="text-xl font-bold text-gray-800 tracking-wider mb-1">仕罡印刷工作交接系統</h2>
+            <p class="text-xs text-gray-400 mb-6">請先驗證您的員工身分密碼</p>
+            <div class="space-y-4 text-left text-xs">
+                <div>
+                    <label class="block text-gray-600 font-bold mb-1">選擇您的姓名</label>
+                    <select id="authEmpName" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-500">
+                        <option value="">請點擊選擇...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-600 font-bold mb-1">通行密碼</label>
+                    <input type="password" id="authPassword" placeholder="請輸入密碼" class="w-full p-2.5 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-slate-500" onkeypress="if(event.key==='Enter') verifySystemAccess()">
+                </div>
+                <button onclick="verifySystemAccess()" id="authBtn" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-sm tracking-widest shadow transition-all">
+                    驗證身分並登入
+                </button>
+                <p id="authError" class="text-red-500 font-bold text-center mt-2 hidden tracking-wide">❌ 密碼輸入錯誤，請重新確認！</p>
+            </div>
+        </div>
+    </div>
+
     <div class="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-md p-4 md:p-6">
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-5 border-b pb-4">
             <div>
@@ -68,8 +91,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-gray-600 font-bold mb-1">交接發布人</label>
-                        <select id="hoCreator" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
+                        <label class="block text-gray-600 font-bold mb-1">交接發布人 (已鎖定)</label>
+                        <input type="text" id="hoCreator" readonly class="w-full p-2.5 border rounded-lg text-sm bg-gray-100 text-gray-500 font-bold cursor-not-allowed">
                     </div>
                 </div>
                 <div>
@@ -113,11 +136,75 @@
         let currentHandovers = [];
         let userListCache = [];
         let currentSortOrder = 'desc'; 
+        let loggedInUser = ""; // 暫存當前驗證通過的員工姓名
 
         window.onload = async () => {
-            await fetchUsersAndBuildDropdown();
-            loadMainData();
+            await checkAuthenticationState();
         };
+
+        // 智慧身分驗證生命週期攔截器
+        async function checkAuthenticationState() {
+            // 優先取得大數據在職名單以利表單建立
+            userListCache = await fetchUsersFromSupabase();
+            
+            // 讀取本地瀏覽器快取身分
+            const cachedUser = localStorage.getItem("sg_handover_user");
+            if (cachedUser && userListCache.includes(cachedUser)) {
+                loggedInUser = cachedUser;
+                buildAssigneeDropdown();
+                loadMainData();
+            } else {
+                // 未登入，彈出身分驗證牆
+                buildAuthDropdown();
+                document.getElementById('authLockScreen').classList.remove('hidden');
+            }
+        }
+
+        function buildAuthDropdown() {
+            let opts = '<option value="">請點擊選擇您的姓名...</option>';
+            userListCache.forEach(name => opts += `<option value="${name}">${name}</option>`);
+            document.getElementById('authEmpName').innerHTML = opts;
+        }
+
+        function buildAssigneeDropdown() {
+            let assigneeOpts = '<option value="全員">全員 (群體廣播)</option>';
+            userListCache.forEach(name => assigneeOpts += `<option value="${name}">${name}</option>`);
+            document.getElementById('hoAssignee').innerHTML = assigneeOpts;
+        }
+
+        // 執行驗證程序 (比對 Supabase users_auth 的 password)
+        async function verifySystemAccess() {
+            const empName = document.getElementById('authEmpName').value;
+            const password = document.getElementById('authPassword').value;
+            const btn = document.getElementById('authBtn');
+            const err = document.getElementById('authError');
+
+            if (!empName) return alert("請選擇您的姓名");
+            if (!password) return alert("請輸入驗證密碼");
+
+            btn.disabled = true; btn.innerText = "驗證中...";
+            err.classList.add('hidden');
+
+            try {
+                let { data, error } = await sbClient.from('users_auth').select('password').eq('emp_name', empName);
+                if (error) throw error;
+
+                if (data && data.length > 0 && String(data[0].password) === String(password)) {
+                    // 驗證成功
+                    localStorage.setItem("sg_handover_user", empName);
+                    loggedInUser = empName;
+                    document.getElementById('authLockScreen').classList.add('hidden');
+                    buildAssigneeDropdown();
+                    loadMainData();
+                } else {
+                    err.classList.remove('hidden');
+                }
+            } catch(e) {
+                alert("連線失敗：" + e.message);
+            } finally {
+                btn.disabled = false; btn.innerText = "驗證身分並登入";
+            }
+        }
 
         async function fetchUsersFromSupabase() {
             let { data, error } = await sbClient.from('users_auth').select('emp_name, is_visible');
@@ -138,18 +225,6 @@
             renderHandovers(currentHandovers);
             document.getElementById('loadingIndicator').classList.add('hidden');
             document.getElementById('handoverList').classList.remove('hidden');
-        }
-
-        async function fetchUsersAndBuildDropdown() {
-            userListCache = await fetchUsersFromSupabase();
-            let creatorOpts = '<option value="">請選擇您的姓名...</option>';
-            let assigneeOpts = '<option value="全員">全員 (群體廣播)</option>';
-            userListCache.forEach(name => {
-                creatorOpts += `<option value="${name}">${name}</option>`;
-                assigneeOpts += `<option value="${name}">${name}</option>`;
-            });
-            document.getElementById('hoCreator').innerHTML = creatorOpts;
-            document.getElementById('hoAssignee').innerHTML = assigneeOpts;
         }
 
         function renderHandovers(list) {
@@ -203,16 +278,13 @@
             });
         }
 
-        // ============================================================
-        // 前端智慧分流群發引擎 (免改 GS、精確排解全員群發卡點)
-        // ============================================================
         async function submitHandover(btn) {
             const priority = document.getElementById('hoPriority').value;
             const creator = document.getElementById('hoCreator').value;
             const assignee = document.getElementById('hoAssignee').value;
             const content = document.getElementById('hoContent').value.trim();
 
-            if(!creator) return alert("請選擇您的姓名（發布人）");
+            if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網頁");
             if(!assignee) return alert("請選擇接收人");
             if(!content) return alert("請輸入交接內容");
 
@@ -220,13 +292,12 @@
             let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
 
             try {
-                // 1. 寫入 Supabase 交接主表
                 let { error } = await sbClient.from('handovers').insert([{
                     content: content, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
                 }]);
                 if (error) throw error;
 
-                // 2. 智慧判斷：若是全員，自動將緩存清單內的員工依序發送，破解全員推播阻斷
+                // 智慧分流推播：全員時自動前端迴圈分拆發送，不需更動 GS 邏輯
                 if (assignee === "全員") {
                     userListCache.forEach(targetEmployee => {
                         fetch(GAS_LINE_API, {
@@ -300,10 +371,17 @@
             });
         }
 
+        // 修改日期排序控制，改在前端快取排序，不必重新拉取後端
         function toggleDateSort() {
             currentSortOrder = (currentSortOrder === 'desc') ? 'asc' : 'desc';
             document.getElementById('sortBtn').innerText = currentSortOrder === 'desc' ? "⏳ 日期排序 (新➔舊)" : "⌛ 日期排序 (舊➔新)";
-            loadMainData();
+            
+            currentHandovers.sort((a, b) => {
+                let timeA = new Date(a.created_at).getTime();
+                let timeB = new Date(b.created_at).getTime();
+                return currentSortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+            });
+            renderHandovers(currentHandovers);
         }
 
         function filterHandovers() {
@@ -342,7 +420,9 @@
         }
 
         function openHandoverModal() {
-            document.getElementById('hoContent').value = ''; document.getElementById('hoCreator').value = '';
+            document.getElementById('hoContent').value = ''; 
+            // 🔒 強制帶入經登入驗證通過的姓名
+            document.getElementById('hoCreator').value = loggedInUser;
             document.getElementById('hoAssignee').value = '全員'; document.getElementById('hoImage').value = '';
             document.getElementById('hoImagePreview').classList.add('hidden'); hoImageBase64 = "";
             document.getElementById('handoverModal').classList.remove('hidden');
