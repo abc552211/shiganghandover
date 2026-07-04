@@ -16,13 +16,25 @@
 <body class="p-2 md:p-6 min-h-[100dvh] flex flex-col items-center">
 
     <div class="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-md p-4 md:p-6">
-        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 border-b pb-4">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-5 border-b pb-4">
             <div>
                 <h1 class="text-xl font-bold text-gray-800 border-l-4 border-slate-600 pl-2 tracking-wider">仕罡印刷事業 - 工作交接看板</h1>
                 <p class="text-xs text-gray-400 mt-1">交接務必確實完整，避免遺漏造成後續作業中斷。</p>
             </div>
             <button onclick="openHandoverModal()" class="w-full sm:w-auto bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow transition-all">
                 ＋ 新增發布交接
+            </button>
+        </div>
+
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5">
+                <button onclick="filterPriority('all')" class="px-2.5 py-1 bg-slate-600 text-white text-xs font-bold rounded shadow-sm hover:bg-slate-700 transition">全部</button>
+                <button onclick="filterPriority('高')" class="px-2.5 py-1 bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded shadow-sm hover:bg-red-200 transition">🔴 高</button>
+                <button onclick="filterPriority('中')" class="px-2.5 py-1 bg-yellow-100 text-yellow-800 border border-yellow-200 text-xs font-bold rounded shadow-sm hover:bg-yellow-200 transition">🟡 中</button>
+                <button onclick="filterPriority('低')" class="px-2.5 py-1 bg-green-100 text-green-700 border border-green-200 text-xs font-bold rounded shadow-sm hover:bg-green-200 transition">🟢 低</button>
+            </div>
+            <button onclick="toggleDateSort()" id="sortBtn" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 border text-gray-700 text-xs font-bold rounded shadow-sm transition">
+                ⏳ 日期排序 (新➔舊)
             </button>
         </div>
 
@@ -99,6 +111,7 @@
         let hoImageBase64 = ""; 
         let currentHandovers = [];
         let userListCache = [];
+        let currentSortOrder = 'desc'; // desc: 新➔舊, asc: 舊➔新
 
         window.onload = async () => {
             await fetchUsersAndBuildDropdown();
@@ -111,11 +124,8 @@
             return (data || []).filter(u => u.is_visible !== '否').map(u => u.emp_name);
         }
 
-        async function filterCustomMat() {}
-        async function loadSystem() { refreshSystem(); }
-
         async function fetchHandoversFromSupabase() {
-             let { data, error } = await sbClient.from('handovers').select('*').order('created_at', { ascending: false });
+             let { data, error } = await sbClient.from('handovers').select('*').order('created_at', { ascending: (currentSortOrder === 'asc') });
              if (error) return [];
              return data || [];
         }
@@ -131,15 +141,12 @@
 
         async function fetchUsersAndBuildDropdown() {
             userListCache = await fetchUsersFromSupabase();
-            
             let creatorOpts = '<option value="">請選擇您的姓名...</option>';
             let assigneeOpts = '<option value="全員">全員 (群體廣播)</option>';
-            
             userListCache.forEach(name => {
                 creatorOpts += `<option value="${name}">${name}</option>`;
                 assigneeOpts += `<option value="${name}">${name}</option>`;
             });
-            
             document.getElementById('hoCreator').innerHTML = creatorOpts;
             document.getElementById('hoAssignee').innerHTML = assigneeOpts;
         }
@@ -156,8 +163,12 @@
                 if(ho.priority === '高') { bg = 'bg-red-50/50 border-red-200'; badge = 'bg-red-500'; }
                 else if(ho.priority === '中') { bg = 'bg-yellow-50/50 border-yellow-200'; badge = 'bg-yellow-500'; }
 
-                // 📸 獨立將圖片區塊移至卡片下方底部，完全不干擾右上角的按鈕
-                let imgHtml = ho.image_url ? `<div class="mt-3 pt-2 border-t border-gray-100 flex justify-start"><img src="${ho.image_url}" class="w-20 h-20 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90 transition" onclick="openImageModal('${ho.image_url}')"></div>` : '';
+                // 📸 完美適配：縮圖靠右側中段，限制最大高度，避免撐高卡片
+                let imgHtml = ho.image_url ? `
+                    <div class="flex-shrink-0 ml-4 self-center">
+                        <img src="${ho.image_url}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90 transition" onclick="openImageModal('${ho.image_url}')">
+                    </div>` : '';
+                    
                 let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
 
                 let safeContent = encodeURIComponent(ho.content);
@@ -165,7 +176,7 @@
                 let safeAssignee = encodeURIComponent(ho.assignee);
 
                 container.innerHTML += `
-                    <div class="p-4 rounded-xl border ${bg} flex flex-col shadow-sm relative pt-7 handover-card">
+                    <div class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-7 handover-card" data-priority="${ho.priority}">
                         <div class="absolute top-1.5 left-2 flex items-center gap-1">
                             <span class="px-1.5 py-0.5 rounded text-white font-bold text-[10px] ${badge}">${ho.priority}</span>
                             <button onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-sm bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition" title="結案刪除">
@@ -179,7 +190,7 @@
                             </button>
                         </div>
 
-                        <div class="w-full flex flex-col space-y-2 mt-1">
+                        <div class="min-w-0 flex-1 flex flex-col space-y-2 mt-1">
                             <div class="flex flex-wrap items-center text-[11px] text-gray-400 gap-x-2 border-b border-dashed pb-1">
                                 <span class="font-bold text-slate-600">發布人員:${ho.creator}</span>
                                 <span>➔</span>
@@ -235,9 +246,7 @@
             const creator = decodeURIComponent(creatorEnc);
             const assignee = decodeURIComponent(assigneeEnc);
             const content = decodeURIComponent(contentEnc);
-
             if(!confirm(`確定要將此筆 [${priority}級] 交接通知重新轉發給 [${assignee}] 嗎？`)) return;
-
             fetch(GAS_LINE_API, {
                 method: "POST",
                 mode: "no-cors",
@@ -252,6 +261,22 @@
         async function deleteHandover(id) {
             if(!confirm("確定要刪除/結案這筆交接事項嗎？")) return;
             await sbClient.from('handovers').delete().eq('id', id);
+            loadMainData();
+        }
+
+        // 階級快篩控制
+        function filterPriority(prio) {
+            document.getElementById('searchInput').value = ''; // 清空字串搜尋
+            document.querySelectorAll('.handover-card').forEach(card => {
+                if (prio === 'all') { card.style.display = ""; } 
+                else { card.style.display = card.getAttribute('data-priority') === prio ? "" : "none"; }
+            });
+        }
+
+        // 日期排序切換控制
+        function toggleDateSort() {
+            currentSortOrder = (currentSortOrder === 'desc') ? 'asc' : 'desc';
+            document.getElementById('sortBtn').innerText = currentSortOrder === 'desc' ? "⏳ 日期排序 (新➔舊)" : "⌛ 日期排序 (舊➔新)";
             loadMainData();
         }
 
@@ -298,7 +323,6 @@
         }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
         function openImageModal(src) { document.getElementById('largeImageTarget').src = src; document.getElementById('viewImageModal').classList.remove('hidden'); }
-        function refreshSystem() { loadMainData(); }
     </script>
 </body>
 </html>
