@@ -30,7 +30,6 @@
             <div class="flex items-center gap-1.5">
                 <button onclick="filterPriority('all')" class="px-2.5 py-1 bg-slate-600 text-white text-xs font-bold rounded shadow-sm hover:bg-slate-700 transition">全部</button>
                 <button onclick="filterPriority('高')" class="px-2.5 py-1 bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded shadow-sm hover:bg-red-200 transition">🔴 高</button>
-                <button onclick="filterPriority('中')" class="px-2.5 py-1 bg-yellow-100 text-yellow-800 border border-yellow-200 text-xs font-bold rounded shadow-sm hover:bg-yellow-200 transition">🟡 中</button>
                 <button onclick="filterPriority('低')" class="px-2.5 py-1 bg-green-100 text-green-700 border border-green-200 text-xs font-bold rounded shadow-sm hover:bg-green-200 transition">🟢 低</button>
             </div>
             <button onclick="toggleDateSort()" id="sortBtn" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 border text-gray-700 text-xs font-bold rounded shadow-sm transition">
@@ -111,7 +110,7 @@
         let hoImageBase64 = ""; 
         let currentHandovers = [];
         let userListCache = [];
-        let currentSortOrder = 'desc'; // desc: 新➔舊, asc: 舊➔新
+        let currentSortOrder = 'desc'; 
 
         window.onload = async () => {
             await fetchUsersAndBuildDropdown();
@@ -163,7 +162,6 @@
                 if(ho.priority === '高') { bg = 'bg-red-50/50 border-red-200'; badge = 'bg-red-500'; }
                 else if(ho.priority === '中') { bg = 'bg-yellow-50/50 border-yellow-200'; badge = 'bg-yellow-500'; }
 
-                // 📸 完美適配：縮圖靠右側中段，限制最大高度，避免撐高卡片
                 let imgHtml = ho.image_url ? `
                     <div class="flex-shrink-0 ml-4 self-center">
                         <img src="${ho.image_url}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90 transition" onclick="openImageModal('${ho.image_url}')">
@@ -176,17 +174,17 @@
                 let safeAssignee = encodeURIComponent(ho.assignee);
 
                 container.innerHTML += `
-                    <div class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-7 handover-card" data-priority="${ho.priority}">
+                    <div class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-8 handover-card" data-priority="${ho.priority}">
                         <div class="absolute top-1.5 left-2 flex items-center gap-1">
                             <span class="px-1.5 py-0.5 rounded text-white font-bold text-[10px] ${badge}">${ho.priority}</span>
-                            <button onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-sm bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition" title="結案刪除">
+                            <button onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-xs bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition">
                                 結案 ✕
                             </button>
                         </div>
 
                         <div class="absolute top-1.5 right-2">
-                            <button onclick="shareToLine('${safeCreator}', '${safeAssignee}', '${ho.priority}', '${safeContent}')" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold text-xs px-2 py-0.5 rounded border shadow-sm transition flex items-center gap-0.5" title="同步傳送至 LINE">
-                                🔁 轉發 LINE
+                            <button onclick="shareToLine('${safeCreator}', '${safeAssignee}', '${ho.priority}', '${safeContent}')" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold text-xs px-2 py-0.5 rounded border shadow-sm transition flex items-center gap-0.5">
+                                📤 分享交接
                             </button>
                         </div>
 
@@ -197,7 +195,7 @@
                                 <span class="font-bold text-indigo-600">接收指名:${ho.assignee}</span>
                                 <span class="font-mono ml-auto">${dateStr}</span>
                             </div>
-                            <p class="text-slate-800 text-base font-semibold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${ho.content}</p>
+                            <p class="text-slate-800 text-base font-bold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${ho.content}</p>
                         </div>
                         
                         ${imgHtml}
@@ -242,20 +240,41 @@
             }
         }
 
+        // 重構：喚起手機原生多管道分享選單，不支援時降級至原來的 LINE 自動推播
         function shareToLine(creatorEnc, assigneeEnc, priority, contentEnc) {
             const creator = decodeURIComponent(creatorEnc);
             const assignee = decodeURIComponent(assigneeEnc);
             const content = decodeURIComponent(contentEnc);
-            if(!confirm(`確定要將此筆 [${priority}級] 交接通知重新轉發給 [${assignee}] 嗎？`)) return;
-            fetch(GAS_LINE_API, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: content
+
+            let shareText = `⚠️【仕罡印刷 - 工作交接單】\n`;
+            shareText += `-------------------------\n`;
+            shareText += `● 優先級別：${priority}\n`;
+            shareText += `● 發布人員：${creator}\n`;
+            shareText += `-------------------------\n`;
+            shareText += `【交接具體內容】\n${content}\n`;
+            shareText += `-------------------------\n`;
+            shareText += `🔗 點擊查看完整看板：${window.location.href}`;
+
+            if (navigator.share) {
+                navigator.share({
+                    title: `仕罡印刷 - 交接通知 [${priority}]`,
+                    text: shareText
                 })
-            });
-            alert("🔁 LINE 轉發請求已送出！");
+                .then(() => console.log('成功喚起原生分享選單'))
+                .catch((error) => console.log('使用者取消分享', error));
+            } else {
+                if(confirm(`偵測到目前為電腦版環境。\n確定要直接將此筆交接通知透過 Supabase 專向推播給 [${assignee}] 的 LINE 嗎？`)) {
+                    fetch(GAS_LINE_API, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            action: "reShareNotification", creator: creator, assignee: assignee, priority: priority, content: content
+                        })
+                    });
+                    alert("📤 LINE 數位截圖已完成分享！");
+                }
+            }
         }
 
         async function deleteHandover(id) {
@@ -264,16 +283,14 @@
             loadMainData();
         }
 
-        // 階級快篩控制
         function filterPriority(prio) {
-            document.getElementById('searchInput').value = ''; // 清空字串搜尋
+            document.getElementById('searchInput').value = ''; 
             document.querySelectorAll('.handover-card').forEach(card => {
                 if (prio === 'all') { card.style.display = ""; } 
                 else { card.style.display = card.getAttribute('data-priority') === prio ? "" : "none"; }
             });
         }
 
-        // 日期排序切換控制
         function toggleDateSort() {
             currentSortOrder = (currentSortOrder === 'desc') ? 'asc' : 'desc';
             document.getElementById('sortBtn').innerText = currentSortOrder === 'desc' ? "⏳ 日期排序 (新➔舊)" : "⌛ 日期排序 (舊➔新)";
