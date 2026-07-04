@@ -12,6 +12,11 @@
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #F0F1F0; }
         ::-webkit-scrollbar-thumb { background: #8D9B9F; border-radius: 10px; }
+        @keyframes pulse-blink {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.96); }
+        }
+        .animate-pulse-blink { animation: pulse-blink 1.2s infinite ease-in-out; }
     </style>
 </head>
 <body class="p-2 md:p-6 min-h-[100dvh] flex flex-col items-center">
@@ -63,7 +68,7 @@
         </div>
 
         <div class="mb-4">
-            <input type="text" id="searchInput" onkeyup="filterHandovers()" placeholder="輸入關鍵字篩選交接事項..." class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-slate-500">
+            <input type="text" id="searchInput" onkeyup="filterHandovers()" placeholder="輸入關鍵字篩選交接內容、發布人、接收人..." class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-slate-500">
         </div>
 
         <div id="loadingIndicator" class="flex flex-col items-center justify-center py-12">
@@ -75,7 +80,7 @@
     </div>
 
     <div id="handoverModal" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl w-full max-w-md border shadow-2xl flex flex-col max-h-[90vh]">
+        <div class="bg-white rounded-xl w-full max-w-md border shadow-2xl flex flex-col max-h-[95vh]">
             <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
                 <h3 class="font-bold text-gray-800 tracking-wider">✍️ 新增工作交接</h3>
                 <button onclick="closeModal('handoverModal')" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -99,6 +104,26 @@
                     <label class="block text-gray-600 font-bold mb-1">指定接收人 (自動連動 LINE 專向推播)</label>
                     <select id="hoAssignee" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
                 </div>
+                
+                <div class="flex items-center justify-between bg-slate-100 p-3 rounded-xl border border-gray-200">
+                    <span id="toggleStatusLabel" class="text-sm font-bold text-indigo-700 tracking-wide">📅 當前模式：指定時間</span>
+                    <label class="relative inline-flex items-center cursor-pointer select-none">
+                        <input type="checkbox" id="hoModeToggle" onchange="handleModeToggleChange()" class="sr-only peer">
+                        <div class="w-14 h-7 bg-indigo-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-6 after:transition-all peer-checked:bg-slate-500"></div>
+                    </label>
+                </div>
+
+                <div id="dateTimeFieldsBlock" class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-gray-200">
+                    <div>
+                        <label class="block text-gray-700 font-bold mb-1">📅 指定處理日期</label>
+                        <input type="date" id="hoTargetDate" class="w-full p-2 border rounded-lg text-sm bg-white">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-bold mb-1">⏱️ 指定處理時間</label>
+                        <select id="hoTargetTime" class="w-full p-2 border rounded-lg text-sm bg-white"></select>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-gray-600 font-bold mb-1">交接具體內容</label>
                     <textarea id="hoContent" rows="4" placeholder="請詳細敘述交接交代事項..." class="w-full p-2.5 border rounded-lg text-sm"></textarea>
@@ -136,25 +161,21 @@
         let currentHandovers = [];
         let userListCache = [];
         let currentSortOrder = 'desc'; 
-        let loggedInUser = ""; // 暫存當前驗證通過的員工姓名
+        let loggedInUser = ""; 
 
         window.onload = async () => {
             await checkAuthenticationState();
+            buildTargetTimeOptions(); 
         };
 
-        // 智慧身分驗證生命週期攔截器
         async function checkAuthenticationState() {
-            // 優先取得大數據在職名單以利表單建立
             userListCache = await fetchUsersFromSupabase();
-            
-            // 讀取本地瀏覽器快取身分
             const cachedUser = localStorage.getItem("sg_handover_user");
             if (cachedUser && userListCache.includes(cachedUser)) {
                 loggedInUser = cachedUser;
                 buildAssigneeDropdown();
                 loadMainData();
             } else {
-                // 未登入，彈出身分驗證牆
                 buildAuthDropdown();
                 document.getElementById('authLockScreen').classList.remove('hidden');
             }
@@ -172,7 +193,50 @@
             document.getElementById('hoAssignee').innerHTML = assigneeOpts;
         }
 
-        // 執行驗證程序 (比對 Supabase users_auth 的 password)
+        function buildTargetTimeOptions() {
+            const select = document.getElementById('hoTargetTime');
+            let opts = '';
+            for (let hour = 6; hour <= 22; hour++) {
+                for (let min = 0; min < 60; min += 10) {
+                    if (hour === 22 && min > 0) break; 
+                    let hh = String(hour).padStart(2, '0');
+                    let mm = String(min).padStart(2, '0');
+                    opts += `<option value="${hh}:${mm}">${hh}:${mm}</option>`;
+                }
+            }
+            select.innerHTML = opts;
+
+            let now = new Date();
+            now.setMinutes(now.getMinutes() + 30);
+            let m = now.getMinutes();
+            let roundedMin = Math.round(m / 10) * 10;
+            if (roundedMin === 60) { now.setHours(now.getHours() + 1); roundedMin = 0; }
+            
+            let defH = now.getHours();
+            if (defH < 6) defH = 6;
+            if (defH > 22) { defH = 22; roundedMin = 0; }
+            
+            let defTimeStr = String(defH).padStart(2, '0') + ":" + String(roundedMin).padStart(2, '0');
+            select.value = defTimeStr;
+            document.getElementById('hoTargetDate').value = new Date().toISOString().substring(0, 10);
+        }
+
+        function handleModeToggleChange() {
+            const isChecked = document.getElementById('hoModeToggle').checked;
+            const label = document.getElementById('toggleStatusLabel');
+            const timeBlock = document.getElementById('dateTimeFieldsBlock');
+            
+            if (isChecked) {
+                label.innerText = "📌 當前模式：追蹤工作";
+                label.className = "text-sm font-bold text-slate-600 tracking-wide";
+                timeBlock.classList.add('hidden');
+            } else {
+                label.innerText = "📅 當前模式：指定時間";
+                label.className = "text-sm font-bold text-indigo-700 tracking-wide";
+                timeBlock.classList.remove('hidden');
+            }
+        }
+
         async function verifySystemAccess() {
             const empName = document.getElementById('authEmpName').value;
             const password = document.getElementById('authPassword').value;
@@ -190,7 +254,6 @@
                 if (error) throw error;
 
                 if (data && data.length > 0 && String(data[0].password) === String(password)) {
-                    // 驗證成功
                     localStorage.setItem("sg_handover_user", empName);
                     loggedInUser = empName;
                     document.getElementById('authLockScreen').classList.add('hidden');
@@ -234,6 +297,9 @@
                 container.innerHTML = `<p class="text-gray-400 text-center py-12 bg-gray-50 border border-dashed rounded-xl">目前沒有待辦交接事項</p>`;
                 return;
             }
+            
+            const nowTime = new Date().getTime();
+
             list.forEach(ho => {
                 let bg = 'bg-white border-gray-200'; let badge = 'bg-green-500';
                 if(ho.priority === '高') { bg = 'bg-red-50/50 border-red-200'; badge = 'bg-red-500'; }
@@ -247,11 +313,34 @@
                 let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
                 let cardDomId = `card_id_${ho.id}`;
 
+                let expiryAlertHtml = '';
+                if (ho.content.includes("預計處理時間：")) {
+                    try {
+                        let match = ho.content.match(/預計處理時間：([0-8\-]+ \d\d:\d\d)/);
+                        if (match && match[1]) {
+                            let targetTimestamp = new Date(match[1].replace(/-/g, '/')).getTime();
+                            if (nowTime > targetTimestamp) {
+                                expiryAlertHtml = `<span class="px-2 py-0.5 ml-1 bg-red-600 text-white rounded text-[10px] font-extrabold animate-pulse-blink shadow-sm">⚠️ 處理時間已過期！</span>`;
+                            }
+                        }
+                    } catch(e){}
+                }
+
+                // ✂️ 【關鍵優化】在前端渲染畫面時，把用來提供給 LINE 點擊的日曆網址過濾掉，維持看板版面純淨
+                let cleanContent = ho.content;
+                if (cleanContent.includes("📅點擊加入行事曆：")) {
+                    cleanContent = cleanContent.split("📅點擊加入行事曆：")[0].trim();
+                }
+
                 container.innerHTML += `
-                    <div id="${cardDomId}" class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-8 handover-card" data-priority="${ho.priority}">
+                    <div id="${cardDomId}" class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-8 handover-card" 
+                         data-priority="${ho.priority}" 
+                         data-creator="${ho.creator}" 
+                         data-assignee="${ho.assignee}">
                         
                         <div class="absolute top-1.5 left-2 flex items-center gap-1">
                             <span class="px-1.5 py-0.5 rounded text-white font-bold text-[10px] ${badge}">${ho.priority}</span>
+                            ${expiryAlertHtml}
                             <button data-html2canvas-ignore="true" onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-xs bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition">
                                 結案 ✕
                             </button>
@@ -270,7 +359,7 @@
                                 <span class="font-bold text-indigo-600">接收指名:${ho.assignee}</span>
                                 <span class="font-mono ml-auto">${dateStr}</span>
                             </div>
-                            <p class="text-slate-800 text-base font-bold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${ho.content}</p>
+                            <p class="text-slate-800 text-base font-bold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${cleanContent}</p>
                         </div>
                         
                         ${imgHtml}
@@ -282,22 +371,42 @@
             const priority = document.getElementById('hoPriority').value;
             const creator = document.getElementById('hoCreator').value;
             const assignee = document.getElementById('hoAssignee').value;
-            const content = document.getElementById('hoContent').value.trim();
+            let content = document.getElementById('hoContent').value.trim();
+            const isTrackingMode = document.getElementById('hoModeToggle').checked; 
 
-            if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網頁");
+            if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網網頁");
             if(!assignee) return alert("請選擇接收人");
             if(!content) return alert("請輸入交接內容");
+
+            let dbContent = "";
+            let lineContent = "";
+
+            if (!isTrackingMode) {
+                const targetDate = document.getElementById('hoTargetDate').value;
+                const targetTime = document.getElementById('hoTargetTime').value;
+                const displayTime = `${targetDate} ${targetTime}`;
+                const gCalDate = displayTime.replace(/[- :]/g, '').substring(0, 12) + "00"; 
+                const gCalLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('仕罡印刷-交接待辦項目')}&dates=${gCalDate}/${gCalDate}&details=${encodeURIComponent(content)}`;
+                
+                // 數據庫與 LINE 分流：網址只留給 LINE 推播，看板主體保持乾淨
+                dbContent = `⏰【預計處理時間：${displayTime}】\n-------------------------\n${content}`;
+                lineContent = `${dbContent}\n\n📅點擊加入行事曆：${gCalLink}`;
+            } else {
+                dbContent = `📌【追蹤工作單：未結案前持續掛載】\n-------------------------\n${content}`;
+                lineContent = dbContent;
+            }
 
             btn.disabled = true; btn.innerText = "傳送中...";
             let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
 
             try {
+                // 1. 寫入 Supabase (存入乾淨的 dbContent)
                 let { error } = await sbClient.from('handovers').insert([{
-                    content: content, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
+                    content: dbContent, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
                 }]);
                 if (error) throw error;
 
-                // 智慧分流推播：全員時自動前端迴圈分拆發送，不需更動 GS 邏輯
+                // 2. LINE 推播分流 (送出帶有行事曆網址的 lineContent)
                 if (assignee === "全員") {
                     userListCache.forEach(targetEmployee => {
                         fetch(GAS_LINE_API, {
@@ -305,7 +414,7 @@
                             mode: "no-cors",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: content
+                                action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: lineContent
                             })
                         });
                     });
@@ -315,7 +424,7 @@
                         mode: "no-cors",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: content
+                            action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: lineContent
                         })
                     });
                 }
@@ -371,7 +480,6 @@
             });
         }
 
-        // 修改日期排序控制，改在前端快取排序，不必重新拉取後端
         function toggleDateSort() {
             currentSortOrder = (currentSortOrder === 'desc') ? 'asc' : 'desc';
             document.getElementById('sortBtn').innerText = currentSortOrder === 'desc' ? "⏳ 日期排序 (新➔舊)" : "⌛ 日期排序 (舊➔新)";
@@ -387,7 +495,10 @@
         function filterHandovers() {
             let q = document.getElementById('searchInput').value.toLowerCase();
             document.querySelectorAll('.handover-card').forEach(card => {
-                card.style.display = card.innerText.toLowerCase().includes(q) ? "" : "none";
+                const textPool = card.innerText.toLowerCase() + " " + 
+                                 card.getAttribute('data-creator').toLowerCase() + " " + 
+                                 card.getAttribute('data-assignee').toLowerCase();
+                card.style.display = textPool.includes(q) ? "" : "none";
             });
         }
 
@@ -421,10 +532,12 @@
 
         function openHandoverModal() {
             document.getElementById('hoContent').value = ''; 
-            // 🔒 強制帶入經登入驗證通過的姓名
             document.getElementById('hoCreator').value = loggedInUser;
             document.getElementById('hoAssignee').value = '全員'; document.getElementById('hoImage').value = '';
             document.getElementById('hoImagePreview').classList.add('hidden'); hoImageBase64 = "";
+            document.getElementById('hoModeToggle').checked = false; 
+            handleModeToggleChange();
+            buildTargetTimeOptions(); 
             document.getElementById('handoverModal').classList.remove('hidden');
         }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
