@@ -6,6 +6,7 @@
     <title>仕罡印刷-獨立工作交接看板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { color: #3A4449; background-color: #F0F1F0; -webkit-overflow-scrolling: touch; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -168,22 +169,20 @@
                     </div>` : '';
                     
                 let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
-
-                let safeContent = encodeURIComponent(ho.content);
-                let safeCreator = encodeURIComponent(ho.creator);
-                let safeAssignee = encodeURIComponent(ho.assignee);
+                let cardDomId = `card_id_${ho.id}`;
 
                 container.innerHTML += `
-                    <div class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-8 handover-card" data-priority="${ho.priority}">
+                    <div id="${cardDomId}" class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-8 handover-card" data-priority="${ho.priority}">
+                        
                         <div class="absolute top-1.5 left-2 flex items-center gap-1">
                             <span class="px-1.5 py-0.5 rounded text-white font-bold text-[10px] ${badge}">${ho.priority}</span>
-                            <button onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-xs bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition">
+                            <button data-html2canvas-ignore="true" onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-xs bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition">
                                 結案 ✕
                             </button>
                         </div>
 
-                        <div class="absolute top-1.5 right-2">
-                            <button onclick="shareToLine('${safeCreator}', '${safeAssignee}', '${ho.priority}', '${safeContent}')" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold text-xs px-2 py-0.5 rounded border shadow-sm transition flex items-center gap-0.5">
+                        <div class="absolute top-1.5 right-2" data-html2canvas-ignore="true">
+                            <button onclick="shareCardAsImage('${cardDomId}', '${ho.priority}')" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold text-xs px-2 py-0.5 rounded border shadow-sm transition flex items-center gap-0.5">
                                 📤 分享交接
                             </button>
                         </div>
@@ -240,41 +239,32 @@
             }
         }
 
-        // 重構：喚起手機原生多管道分享選單，不支援時降級至原來的 LINE 自動推播
-        function shareToLine(creatorEnc, assigneeEnc, priority, contentEnc) {
-            const creator = decodeURIComponent(creatorEnc);
-            const assignee = decodeURIComponent(assigneeEnc);
-            const content = decodeURIComponent(contentEnc);
+        function shareCardAsImage(cardDomId, priority) {
+            const targetCard = document.getElementById(cardDomId);
+            if (!targetCard) return;
 
-            let shareText = `⚠️【仕罡印刷 - 工作交接單】\n`;
-            shareText += `-------------------------\n`;
-            shareText += `● 優先級別：${priority}\n`;
-            shareText += `● 發布人員：${creator}\n`;
-            shareText += `-------------------------\n`;
-            shareText += `【交接具體內容】\n${content}\n`;
-            shareText += `-------------------------\n`;
-            shareText += `🔗 點擊查看完整看板：${window.location.href}`;
+            html2canvas(targetCard, {
+                scale: 2,          
+                useCORS: true,      
+                backgroundColor: null 
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    if (!blob) return alert("圖像轉換失敗！");
+                    
+                    const imageFile = new File([blob], `仕罡印刷_工作交接單_${priority}.png`, { type: 'image/png' });
 
-            if (navigator.share) {
-                navigator.share({
-                    title: `仕罡印刷 - 交接通知 [${priority}]`,
-                    text: shareText
-                })
-                .then(() => console.log('成功喚起原生分享選單'))
-                .catch((error) => console.log('使用者取消分享', error));
-            } else {
-                if(confirm(`偵測到目前為電腦版環境。\n確定要直接將此筆交接通知透過 Supabase 專向推播給 [${assignee}] 的 LINE 嗎？`)) {
-                    fetch(GAS_LINE_API, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            action: "reShareNotification", creator: creator, assignee: assignee, priority: priority, content: content
+                    if (navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+                        navigator.share({
+                            files: [imageFile],
+                            title: `仕罡印刷 - 工作交接單 [${priority}]`
                         })
-                    });
-                    alert("📤 LINE 數位截圖已完成分享！");
-                }
-            }
+                        .then(() => console.log('真實卡片圖片分享成功！'))
+                        .catch(err => console.log('分享取消或中斷：', err));
+                    } else {
+                        alert("您的手機瀏覽器環境不支援直接原生分享圖片檔案，建議使用 Safari 或內建瀏覽器開啟。");
+                    }
+                }, 'image/png');
+            });
         }
 
         async function deleteHandover(id) {
