@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>仕罡印刷-獨立工作交接看板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { color: #3A4449; background-color: #F0F1F0; -webkit-overflow-scrolling: touch; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #F0F1F0; }
+        ::-webkit-scrollbar-thumb { background: #8D9B9F; border-radius: 10px; }
+    </style>
+</head>
+<body class="p-2 md:p-6 min-h-[100dvh] flex flex-col items-center">
+
+    <div class="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-md p-4 md:p-6">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 border-b pb-4">
+            <div>
+                <h1 class="text-xl font-bold text-gray-800 border-l-4 border-slate-600 pl-2 tracking-wider">仕罡印刷事業 - 工作交接看板</h1>
+                <p class="text-xs text-gray-400 mt-1">交接務必確實完整，避免遺漏造成後續作業中斷。</p>
+            </div>
+            <button onclick="openHandoverModal()" class="w-full sm:w-auto bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow transition-all">
+                ＋ 新增發布交接
+            </button>
+        </div>
+
+        <div class="mb-4">
+            <input type="text" id="searchInput" onkeyup="filterHandovers()" placeholder="輸入關鍵字篩選交接事項..." class="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-slate-500">
+        </div>
+
+        <div id="loadingIndicator" class="flex flex-col items-center justify-center py-12">
+            <div class="w-10 h-10 border-4 border-gray-200 border-t-slate-600 rounded-full animate-spin mb-3"></div>
+            <span class="text-xs font-bold tracking-widest text-gray-400">資料同步中...</span>
+        </div>
+
+        <div id="handoverList" class="space-y-3 hidden"></div>
+    </div>
+
+    <div id="handoverModal" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md border shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                <h3 class="font-bold text-gray-800 tracking-wider">✍️ 新增工作交接</h3>
+                <button onclick="closeModal('handoverModal')" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto text-xs">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-600 font-bold mb-1">優先級別</label>
+                        <select id="hoPriority" class="w-full p-2.5 border rounded-lg text-sm bg-white">
+                            <option value="高">高 (紅色警示)</option>
+                            <option value="中" selected>中 (黃色提醒)</option>
+                            <option value="低">低 (綠色常態)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-600 font-bold mb-1">交接發布人</label>
+                        <select id="hoCreator" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-gray-600 font-bold mb-1">指定接收人 (自動連動 LINE 專向推播)</label>
+                    <select id="hoAssignee" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-600 font-bold mb-1">交接具體內容</label>
+                    <textarea id="hoContent" rows="4" placeholder="請詳細敘述交接交代事項..." class="w-full p-2.5 border rounded-lg text-sm"></textarea>
+                </div>
+                <div>
+                    <label class="block text-gray-600 font-bold mb-1">現場附加照片</label>
+                    <input type="file" id="hoImage" accept="image/*" onchange="handleImageUpload(this)" class="w-full text-xs text-gray-500 cursor-pointer">
+                    <div class="mt-2 flex justify-center bg-gray-50 rounded-lg border border-dashed p-1">
+                        <img id="hoImagePreview" class="hidden max-h-32 object-contain p-1 rounded-lg" src="">
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t flex justify-end gap-3 bg-gray-50 rounded-b-xl">
+                <button onclick="closeModal('handoverModal')" class="px-4 py-2 border hover:bg-gray-100 rounded-lg text-sm">取消</button>
+                <button id="submitBtn" onclick="submitHandover(this)" class="px-5 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-bold shadow">發布並 LINE 推播</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="viewImageModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex items-center justify-center p-4" onclick="closeModal('viewImageModal')">
+        <div class="relative max-w-4xl max-h-[90vh] bg-white p-1 rounded-xl shadow-2xl" onclick="event.stopPropagation()">
+            <img id="largeImageTarget" class="max-w-full max-h-[85vh] object-contain rounded-lg" src="">
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://tfgtvtceiozvnujiiiqj.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_MIbXBy5UrRMMDwcYIaaQbA_1YWEleuK";
+        const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 更改為您的 Google Apps Script 佈署網址
+        const GAS_LINE_API = "https://script.google.com/macros/s/AKfycbwBImtScXqfsZ5q-ik5cqjgGvAGq3yNecD3_QvKBOw70OSoIsETlSuYWYi1aiDoeHhG/exec"; 
+
+        let hoImageBase64 = ""; 
+        let currentHandovers = [];
+        let userListCache = [];
+
+        window.onload = async () => {
+            await fetchUsersAndBuildDropdown();
+            loadMainData();
+        };
+
+        // 智慧大數據串接：撈取 Supabase 員工清單並生成表單下拉選單
+        async function  fetchUsersFromSupabase() {
+            let { data, error } = await sbClient.from('users_auth').select('emp_name, is_visible');
+            if (error) return [];
+            return (data || []).filter(u => u.is_visible !== '否').map(u => u.emp_name);
+        }
+
+        async function filterCustomMat() {
+            // 保留空函式相容原始碼
+        }
+
+        async function loadSystem() {
+             refreshSystem();
+        }
+
+        async function fetchHandoversFromSupabase() {
+             let { data, error } = await sbClient.from('handovers').select('*').order('created_at', { ascending: false });
+             if (error) return [];
+             return data || [];
+        }
+
+        async function loadMainData() {
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('handoverList').classList.add('hidden');
+            currentHandovers = await fetchHandoversFromSupabase();
+            renderHandovers(currentHandovers);
+            document.getElementById('loadingIndicator').classList.add('hidden');
+            document.getElementById('handoverList').classList.remove('hidden');
+        }
+
+        async function fetchUsersAndBuildDropdown() {
+            userListCache = await fetchUsersFromSupabase();
+            
+            let creatorOpts = '<option value="">請選擇您的姓名...</option>';
+            let assigneeOpts = '<option value="全員">全員 (群體廣播)</option>';
+            
+            userListCache.forEach(name => {
+                creatorOpts += `<option value="${name}">${name}</option>`;
+                assigneeOpts += `<option value="${name}">${name}</option>`;
+            });
+            
+            document.getElementById('hoCreator').innerHTML = creatorOpts;
+            document.getElementById('hoAssignee').innerHTML = assigneeOpts;
+        }
+
+        function renderHandovers(list) {
+            const container = document.getElementById('handoverList');
+            container.innerHTML = '';
+            if(list.length === 0) {
+                container.innerHTML = `<p class="text-gray-400 text-center py-12 bg-gray-50 border border-dashed rounded-xl">目前沒有待辦交接事項</p>`;
+                return;
+            }
+            list.forEach(ho => {
+                let bg = 'bg-white border-gray-200'; let badge = 'bg-green-500';
+                if(ho.priority === '高') { bg = 'bg-red-50/50 border-red-200'; badge = 'bg-red-500'; }
+                else if(ho.priority === '中') { bg = 'bg-yellow-50/50 border-yellow-200'; badge = 'bg-yellow-500'; }
+
+                let imgHtml = ho.image_url ? `<div class="flex-shrink-0 ml-3"><img src="${ho.image_url}" class="w-14 h-14 object-cover rounded-lg border cursor-pointer" onclick="openImageModal('${ho.image_url}')"></div>` : '';
+                let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
+
+                container.innerHTML += `
+                    <div class="p-4 rounded-xl border ${bg} flex items-center justify-between shadow-sm handover-card">
+                        <div class="min-w-0 flex-1 flex flex-col space-y-1.5">
+                            <div class="flex flex-wrap items-center text-[11px] text-gray-400 gap-x-2">
+                                <span class="px-1.5 py-0.5 rounded text-white font-bold ${badge}">${ho.priority}</span>
+                                <span class="font-bold text-slate-700">發布:${ho.creator}</span>
+                                <span>➔</span>
+                                <span class="font-bold text-indigo-600">接收:${ho.assignee}</span>
+                                <span class="font-mono">${dateStr}</span>
+                            </div>
+                            <p class="text-gray-700 text-sm whitespace-pre-wrap break-words leading-relaxed">${ho.content}</p>
+                        </div>
+                        ${imgHtml}
+                        <button onclick="deleteHandover('${ho.id}')" class="text-gray-300 hover:text-red-500 text-2xl ml-3 font-light">&times;</button>
+                    </div>`;
+            });
+        }
+
+        async function submitHandover(btn) {
+            const priority = document.getElementById('hoPriority').value;
+            const creator = document.getElementById('hoCreator').value;
+            const assignee = document.getElementById('hoAssignee').value;
+            const content = document.getElementById('hoContent').value.trim();
+
+            if(!creator) return alert("請選擇您的姓名（發布人）");
+            if(!assignee) return alert("請選擇接收人");
+            if(!content) return alert("請輸入交接內容");
+
+            btn.disabled = true; btn.innerText = "傳送中...";
+            let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+
+            try {
+                // 1. 寫入 Supabase 交接主表
+                let { error } = await sbClient.from('handovers').insert([{
+                    content: content, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
+                }]);
+                if (error) throw error;
+
+                // 2. 觸發 GAS 進行 LINE 專向推播 (不卡同步背景執行)
+                fetch(GAS_LINE_API, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: content
+                    })
+                });
+
+                closeModal('handoverModal');
+                loadMainData();
+            } catch(e) {
+                alert("發布失敗：" + e.message);
+            } finally {
+                btn.disabled = false; btn.innerText = "發布並 LINE 推播";
+            }
+        }
+
+        async function deleteHandover(id) {
+            if(!confirm("確定要刪除/結案這筆交接事項嗎？")) return;
+            await sbClient.from('handovers').delete().eq('id', id);
+            loadMainData();
+        }
+
+        function filterHandovers() {
+            let q = document.getElementById('searchInput').value.toLowerCase();
+            document.querySelectorAll('.handover-card').forEach(card => {
+                card.style.display = card.innerText.toLowerCase().includes(q) ? "" : "none";
+            });
+        }
+
+        function handleImageUpload(el) {
+            if(!el.files[0]) return;
+            compressImage(el.files[0], 400, 400, 0.4, function(base64) {
+                hoImageBase64 = base64;
+                document.getElementById('hoImagePreview').src = base64;
+                document.getElementById('hoImagePreview').classList.remove('hidden');
+            });
+        }
+
+        function compressImage(file, maxWidth, maxHeight, quality, callback) {
+            let reader = new FileReader();
+            reader.onload = function(e) {
+                let img = new Image();
+                img.onload = function() {
+                    let canvas = document.createElement('canvas');
+                    let width = img.width; let height = img.height;
+                    if (width > height) { if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; } } 
+                    else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
+                    canvas.width = width; canvas.height = height;
+                    let ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    callback(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function openHandoverModal() {
+            document.getElementById('hoContent').value = ''; document.getElementById('hoCreator').value = '';
+            document.getElementById('hoAssignee').value = '全員'; document.getElementById('hoImage').value = '';
+            document.getElementById('hoImagePreview').classList.add('hidden'); hoImageBase64 = "";
+            document.getElementById('handoverModal').classList.remove('hidden');
+        }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function openImageModal(src) { document.getElementById('largeImageTarget').src = src; document.getElementById('viewImageModal').classList.remove('hidden'); }
+        function refreshSystem() { loadMainData(); }
+    </script>
+</body>
+</html>
