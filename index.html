@@ -21,7 +21,6 @@
 </head>
 <body class="p-2 md:p-6 min-h-[100dvh] flex flex-col items-center">
 
-    <!-- 🔒 首次開啟身分驗證鎖定牆 -->
     <div id="authLockScreen" class="fixed inset-0 bg-slate-900 bg-opacity-95 z-[99] flex items-center justify-center p-4 hidden">
         <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 text-center">
             <h2 class="text-xl font-bold text-gray-800 tracking-wider mb-1">仕罡印刷工作交接系統</h2>
@@ -45,9 +44,7 @@
         </div>
     </div>
 
-    <!-- 看板主介面 -->
     <div class="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-md p-4 md:p-6">
-        <!-- 標頭區 -->
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-5 border-b pb-4">
             <div>
                 <h1 class="text-xl font-bold text-gray-800 border-l-4 border-slate-600 pl-2 tracking-wider">仕罡印刷事業 - 工作交接看板</h1>
@@ -82,7 +79,6 @@
         <div id="handoverList" class="space-y-3 hidden"></div>
     </div>
 
-    <!-- 彈窗：新增交接 -->
     <div id="handoverModal" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center p-2 sm:p-4">
         <div class="bg-white rounded-xl w-full max-w-md border shadow-2xl flex flex-col max-h-[85vh]">
             <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl flex-shrink-0">
@@ -110,7 +106,13 @@
                     <select id="hoAssignee" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
                 </div>
                 
-                <!-- 指定時間 / 追蹤工作 滑動切換開關 -->
+                <div class="flex items-center gap-2 bg-amber-50/50 border border-amber-200/60 p-2.5 rounded-lg">
+                    <input type="checkbox" id="hoSkipLineNotify" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500 cursor-pointer">
+                    <label for="hoSkipLineNotify" class="text-xs text-amber-900 font-bold cursor-pointer select-none">
+                        🤫 此單僅上傳看板，勾選 [不推播] 至 LINE 通知
+                    </label>
+                </div>
+                
                 <div class="flex items-center justify-between bg-slate-100 p-3 rounded-xl border border-gray-200">
                     <span id="toggleStatusLabel" class="text-sm font-bold text-indigo-700 tracking-wide">📅 當前模式：指定時間</span>
                     <label class="relative inline-flex items-center cursor-pointer select-none">
@@ -119,7 +121,6 @@
                     </label>
                 </div>
 
-                <!-- 指定時間之日期選單區塊 -->
                 <div id="dateTimeFieldsBlock" class="flex flex-row gap-3 bg-slate-50 p-3 rounded-lg border border-gray-200 w-full box-border">
                     <div class="w-1/2">
                         <label class="block text-gray-700 font-bold mb-1 truncate">📅 指定處理日期</label>
@@ -151,7 +152,6 @@
         </div>
     </div>
 
-    <!-- 彈窗：大圖 -->
     <div id="viewImageModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex items-center justify-center p-4" onclick="closeModal('viewImageModal')">
         <div class="relative max-w-4xl max-h-[90vh] bg-white p-1 rounded-xl shadow-2xl" onclick="event.stopPropagation()">
             <button onclick="closeModal('viewImageModal')" class="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-md z-10">&times;</button>
@@ -203,18 +203,23 @@
             document.getElementById('hoAssignee').innerHTML = assigneeOpts;
         }
 
+        // 💡 修正 1：將指定日期生成範圍由 7 天擴增至 30 天
         function buildTargetTimeOptions() {
             const dateSelect = document.getElementById('hoTargetDate');
             let dateOpts = '';
             let dayLabels = ['(日)','(一)','(二)','(三)','(四)','(五)','(六)'];
             
-            for (let i = 0; i < 7; i++) {
+            for (let i = 0; i < 30; i++) {
                 let d = new Date();
                 d.setDate(d.getDate() + i);
                 let yyyy = d.getFullYear();
                 let mm = String(d.getMonth() + 1).padStart(2, '0');
                 let dd = String(d.getDate()).padStart(2, '0');
-                let dayName = i === 0 ? "今天" : (i === 1 ? "明天" : dayLabels[d.getDay()]);
+                
+                let dayName = "";
+                if (i === 0) dayName = "今天";
+                else if (i === 1) dayName = "明天";
+                else dayName = dayLabels[d.getDay()];
                 
                 let val = `${yyyy}-${mm}-${dd}`;
                 let text = `${yyyy}年${mm}月${dd}日 ${dayName}`;
@@ -393,7 +398,6 @@
                     }
                 }
 
-                // 💡 修正 1：將 outerCardDomId 設定在最外層的包裹 div 上，以確保 html2canvas 截圖時可以抓到整個包含討論串的完整內容
                 container.innerHTML += `
                     <div id="${outerCardDomId}" class="bg-white border rounded-xl shadow-sm overflow-hidden handover-card" data-priority="${ho.priority}" data-creator="${ho.creator}" data-assignee="${ho.assignee}">
                         
@@ -410,7 +414,6 @@
                                     ${deleteBtnHtml}
                                 </div>
                                 <div class="flex items-center gap-1" data-html2canvas-ignore="true">
-                                    <!-- 💡 修正 2：分享按鈕傳入 outerCardDomId -->
                                     <button onclick="shareCardAsImage('${outerCardDomId}', '${ho.priority}')" class="text-slate-600 hover:text-slate-900 bg-white/80 font-bold text-[10px] px-1.5 py-0.5 rounded border shadow-xs transition">
                                         📤 分享交接
                                     </button>
@@ -562,12 +565,14 @@
             });
         }
 
+        // 💡 修正 3：加入 skipLineNotify 控制邏輯，勾選不推播時繞過 LINE 發送
         async function submitHandover(btn) {
             const priority = document.getElementById('hoPriority').value;
             const creator = document.getElementById('hoCreator').value;
             const assignee = document.getElementById('hoAssignee').value;
             let content = document.getElementById('hoContent').value.trim();
             const isTrackingMode = document.getElementById('hoModeToggle').checked; 
+            const skipLineNotify = document.getElementById('hoSkipLineNotify').checked;
 
             if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網頁");
             if(!assignee) return alert("請選擇接收人");
@@ -599,26 +604,29 @@
                 }]);
                 if (error) throw error;
 
-                if (assignee === "全員") {
-                    userListCache.forEach(targetEmployee => {
+                // 若「未勾選」不推播，才執行 LINE API 發送
+                if (!skipLineNotify) {
+                    if (assignee === "全員") {
+                        userListCache.forEach(targetEmployee => {
+                            fetch(GAS_LINE_API, {
+                                method: "POST",
+                                mode: "no-cors",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: lineContent
+                                })
+                            });
+                        });
+                    } else {
                         fetch(GAS_LINE_API, {
                             method: "POST",
                             mode: "no-cors",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: lineContent
+                                action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: lineContent
                             })
                         });
-                    });
-                } else {
-                    fetch(GAS_LINE_API, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: lineContent
-                        })
-                    });
+                    }
                 }
 
                 closeModal('handoverModal');
@@ -630,16 +638,13 @@
             }
         }
 
-        // 💡 修正 3：讓 html2canvas 的指定節點暫時移除限制，截圖時若討論串區塊為展開狀態，將一併完美渲染成大張圖檔
         function shareCardAsImage(outerCardDomId, priority) {
             const targetCard = document.getElementById(outerCardDomId);
             if (!targetCard) return;
 
-            // 取得該卡片內部的討論串面板，暫時在截圖期間放行 RLS 顯示
             const threadPanel = targetCard.querySelector('[id^="thread_panel_"]');
             let originalIgnoreAttr = null;
             if (threadPanel && !threadPanel.classList.contains('hidden')) {
-                // 如果討論串目前是展開狀態，暫時移除 html2canvas-ignore 以便納入截圖
                 threadPanel.removeAttribute('data-html2canvas-ignore');
                 originalIgnoreAttr = true;
             }
@@ -647,9 +652,8 @@
             html2canvas(targetCard, {
                 scale: 2,          
                 useCORS: true,      
-                backgroundColor: "#FFFFFF" // 固定底色以利延伸區呈現
+                backgroundColor: "#FFFFFF"
             }).then(canvas => {
-                // 還原屬性標記維持原架構
                 if (originalIgnoreAttr && threadPanel) {
                     threadPanel.setAttribute('data-html2canvas-ignore', 'true');
                 }
@@ -739,6 +743,7 @@
             document.getElementById('hoAssignee').value = '全員'; document.getElementById('hoImage').value = '';
             document.getElementById('hoImagePreview').classList.add('hidden'); hoImageBase64 = "";
             document.getElementById('hoModeToggle').checked = false; 
+            document.getElementById('hoSkipLineNotify').checked = false; // 💡 重置不推播狀態
             handleModeToggleChange();
             buildTargetTimeOptions(); 
             document.getElementById('handoverModal').classList.remove('hidden');
