@@ -203,6 +203,9 @@
             });
         }
 
+        // ============================================================
+        // 前端智慧分流群發引擎 (免改 GS、精確排解全員群發卡點)
+        // ============================================================
         async function submitHandover(btn) {
             const priority = document.getElementById('hoPriority').value;
             const creator = document.getElementById('hoCreator').value;
@@ -217,19 +220,34 @@
             let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
 
             try {
+                // 1. 寫入 Supabase 交接主表
                 let { error } = await sbClient.from('handovers').insert([{
                     content: content, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
                 }]);
                 if (error) throw error;
 
-                fetch(GAS_LINE_API, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: content
-                    })
-                });
+                // 2. 智慧判斷：若是全員，自動將緩存清單內的員工依序發送，破解全員推播阻斷
+                if (assignee === "全員") {
+                    userListCache.forEach(targetEmployee => {
+                        fetch(GAS_LINE_API, {
+                            method: "POST",
+                            mode: "no-cors",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: content
+                            })
+                        });
+                    });
+                } else {
+                    fetch(GAS_LINE_API, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: content
+                        })
+                    });
+                }
 
                 closeModal('handoverModal');
                 loadMainData();
