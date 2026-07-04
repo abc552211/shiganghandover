@@ -21,6 +21,7 @@
 </head>
 <body class="p-2 md:p-6 min-h-[100dvh] flex flex-col items-center">
 
+    <!-- 🔒 首次開啟身分驗證鎖定牆 -->
     <div id="authLockScreen" class="fixed inset-0 bg-slate-900 bg-opacity-95 z-[99] flex items-center justify-center p-4 hidden">
         <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-200 text-center">
             <h2 class="text-xl font-bold text-gray-800 tracking-wider mb-1">仕罡印刷工作交接系統</h2>
@@ -44,7 +45,9 @@
         </div>
     </div>
 
+    <!-- 看板主介面 -->
     <div class="w-full max-w-2xl bg-white border border-gray-300 rounded-xl shadow-md p-4 md:p-6">
+        <!-- 標頭區 -->
         <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-5 border-b pb-4">
             <div>
                 <h1 class="text-xl font-bold text-gray-800 border-l-4 border-slate-600 pl-2 tracking-wider">仕罡印刷事業 - 工作交接看板</h1>
@@ -79,6 +82,7 @@
         <div id="handoverList" class="space-y-3 hidden"></div>
     </div>
 
+    <!-- 彈窗：新增交接 -->
     <div id="handoverModal" class="fixed inset-0 bg-black bg-opacity-40 z-50 hidden flex items-center justify-center p-2 sm:p-4">
         <div class="bg-white rounded-xl w-full max-w-md border shadow-2xl flex flex-col max-h-[85vh]">
             <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl flex-shrink-0">
@@ -106,6 +110,7 @@
                     <select id="hoAssignee" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
                 </div>
                 
+                <!-- 指定時間 / 追蹤工作 滑動切換開關 -->
                 <div class="flex items-center justify-between bg-slate-100 p-3 rounded-xl border border-gray-200">
                     <span id="toggleStatusLabel" class="text-sm font-bold text-indigo-700 tracking-wide">📅 當前模式：指定時間</span>
                     <label class="relative inline-flex items-center cursor-pointer select-none">
@@ -114,6 +119,7 @@
                     </label>
                 </div>
 
+                <!-- 指定時間之日期選單區塊 -->
                 <div id="dateTimeFieldsBlock" class="flex flex-row gap-3 bg-slate-50 p-3 rounded-lg border border-gray-200 w-full box-border">
                     <div class="w-1/2">
                         <label class="block text-gray-700 font-bold mb-1 truncate">📅 指定處理日期</label>
@@ -145,6 +151,7 @@
         </div>
     </div>
 
+    <!-- 彈窗：大圖 -->
     <div id="viewImageModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex items-center justify-center p-4" onclick="closeModal('viewImageModal')">
         <div class="relative max-w-4xl max-h-[90vh] bg-white p-1 rounded-xl shadow-2xl" onclick="event.stopPropagation()">
             <button onclick="closeModal('viewImageModal')" class="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-md z-10">&times;</button>
@@ -164,6 +171,7 @@
         let userListCache = [];
         let currentSortOrder = 'desc'; 
         let loggedInUser = ""; 
+        let tempCommentImageBase64 = ""; 
 
         window.onload = async () => {
             await checkAuthenticationState();
@@ -195,7 +203,6 @@
             document.getElementById('hoAssignee').innerHTML = assigneeOpts;
         }
 
-        // 📅 修正 6：重構為文字下拉選單，動態產生未來一週 7 天極好點選的清晰文字選項
         function buildTargetTimeOptions() {
             const dateSelect = document.getElementById('hoTargetDate');
             let dateOpts = '';
@@ -295,7 +302,10 @@
         }
 
         async function fetchHandoversFromSupabase() {
-             let { data, error } = await sbClient.from('handovers').select('*').order('created_at', { ascending: (currentSortOrder === 'asc') });
+             let { data, error } = await sbClient.from('handovers')
+                .select('*')
+                .or('status.is.null,status.neq.已結案')
+                .order('created_at', { ascending: (currentSortOrder === 'asc') });
              if (error) return [];
              return data || [];
         }
@@ -321,8 +331,21 @@
 
             list.forEach(ho => {
                 let bg = 'bg-white border-gray-200'; let badge = 'bg-green-500';
-                if(ho.priority === '高') { bg = 'bg-red-50/50 border-red-200'; badge = 'bg-red-500'; }
-                else if(ho.priority === '中') { bg = 'bg-yellow-50/50 border-yellow-200'; badge = 'bg-yellow-500'; }
+                
+                let topHeaderBg = 'bg-slate-50'; 
+                if(ho.priority === '高') { 
+                    bg = 'bg-red-50/20 border-red-200'; 
+                    badge = 'bg-red-500'; 
+                    topHeaderBg = 'bg-red-100/40'; 
+                }
+                else if(ho.priority === '中') { 
+                    bg = 'bg-yellow-50/20 border-yellow-200'; 
+                    badge = 'bg-yellow-500'; 
+                    topHeaderBg = 'bg-yellow-100/40'; 
+                }
+                else if(ho.priority === '低') {
+                    topHeaderBg = 'bg-green-100/30'; 
+                }
 
                 let imgHtml = ho.image_url ? `
                     <div class="flex-shrink-0 ml-4 self-center">
@@ -330,7 +353,7 @@
                     </div>` : '';
                     
                 let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
-                let cardDomId = `card_id_${ho.id}`;
+                let outerCardDomId = `outer_card_${ho.id}`;
 
                 let expiryAlertHtml = '';
                 if (ho.content.includes("預計處理時間：")) {
@@ -345,43 +368,197 @@
                     } catch(e){}
                 }
 
+                let deleteBtnHtml = (loggedInUser === ho.creator || loggedInUser === ho.assignee || ho.assignee === "全員") ? `
+                    <button data-html2canvas-ignore="true" onclick="archiveHandover('${ho.id}')" class="text-red-600 hover:bg-red-100 font-bold text-[10px] bg-white px-1.5 py-0.5 rounded border shadow-sm transition ml-1">
+                        安全結案 ✓
+                    </button>` : '';
+
                 let cleanContent = ho.content;
                 if (cleanContent.includes("📅點擊加入行事曆：")) {
                     cleanContent = cleanContent.split("📅點擊加入行事曆：")[0].trim();
                 }
 
+                let stateHeaderHtml = '';
+                if (cleanContent.includes("⏰【預計處理時間：")) {
+                    let match = cleanContent.match(/(⏰【預計處理時間：[^\]]+】)/);
+                    if (match && match[1]) {
+                        stateHeaderHtml = `<span class="text-[10px] font-medium text-slate-400 block mb-0.5 tracking-wide">${match[1]}</span>`;
+                        cleanContent = cleanContent.replace(/⏰【預計處理時間：[^\]]+】\n-+\n/, '').trim();
+                    }
+                } else if (cleanContent.includes("📌【追蹤工作單：")) {
+                    let match = cleanContent.match(/(📌【追蹤工作單：[^\]]+】)/);
+                    if (match && match[1]) {
+                        stateHeaderHtml = `<span class="text-[10px] font-medium text-slate-400 block mb-0.5 tracking-wide">${match[1]}</span>`;
+                        cleanContent = cleanContent.replace(/📌【追蹤工作單：[^\]]+】\n-+\n/, '').trim();
+                    }
+                }
+
+                // 💡 修正 1：將 outerCardDomId 設定在最外層的包裹 div 上，以確保 html2canvas 截圖時可以抓到整個包含討論串的完整內容
                 container.innerHTML += `
-                    <div id="${cardDomId}" class="p-4 rounded-xl border ${bg} flex row justify-between shadow-sm relative pt-8 handover-card" 
-                         data-priority="${ho.priority}" 
-                         data-creator="${ho.creator}" 
-                         data-assignee="${ho.assignee}">
+                    <div id="${outerCardDomId}" class="bg-white border rounded-xl shadow-sm overflow-hidden handover-card" data-priority="${ho.priority}" data-creator="${ho.creator}" data-assignee="${ho.assignee}">
                         
-                        <div class="absolute top-1.5 left-2 flex items-center gap-1">
-                            <span class="px-1.5 py-0.5 rounded text-white font-bold text-[10px] ${badge}">${ho.priority}</span>
-                            ${expiryAlertHtml}
-                            <button data-html2canvas-ignore="true" onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-xs bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition">
-                                結案 ✕
-                            </button>
-                        </div>
-
-                        <div class="absolute top-1.5 right-2" data-html2canvas-ignore="true">
-                            <button onclick="shareCardAsImage('${cardDomId}', '${ho.priority}')" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold text-xs px-2 py-0.5 rounded border shadow-sm transition flex items-center gap-0.5">
-                                📤 分享交接
-                            </button>
-                        </div>
-
-                        <div class="min-w-0 flex-1 flex flex-col space-y-2 mt-1">
-                            <div class="flex flex-wrap items-center text-[11px] text-gray-400 gap-x-2 border-b border-dashed pb-1">
-                                <span class="font-bold text-slate-600">發布人員:${ho.creator}</span>
-                                <span>➔</span>
-                                <span class="font-bold text-indigo-600">接收指名:${ho.assignee}</span>
-                                <span class="font-mono ml-auto">${dateStr}</span>
+                        <div class="flex row relative pt-10 pb-4 px-4">
+                            
+                            <div class="flex-shrink-0 flex items-center pr-2" data-html2canvas-ignore="true">
+                                <button onclick="toggleCommentThread('${ho.id}')" id="arrow_icon_${ho.id}" class="text-slate-400 hover:text-slate-700 font-bold text-base px-1.5 py-3 bg-slate-50 border rounded-lg transition">▶</button>
                             </div>
-                            <p class="text-slate-800 text-base font-bold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${cleanContent}</p>
+
+                            <div class="absolute top-0 left-0 right-0 ${topHeaderBg} border-b border-gray-200/60 px-3 py-1 flex items-center justify-between">
+                                <div class="flex items-center gap-1">
+                                    <span class="px-1.5 py-0.5 rounded text-white font-bold text-[9px] ${badge}">${ho.priority}</span>
+                                    ${expiryAlertHtml}
+                                    ${deleteBtnHtml}
+                                </div>
+                                <div class="flex items-center gap-1" data-html2canvas-ignore="true">
+                                    <!-- 💡 修正 2：分享按鈕傳入 outerCardDomId -->
+                                    <button onclick="shareCardAsImage('${outerCardDomId}', '${ho.priority}')" class="text-slate-600 hover:text-slate-900 bg-white/80 font-bold text-[10px] px-1.5 py-0.5 rounded border shadow-xs transition">
+                                        📤 分享交接
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="min-w-0 flex-1 flex flex-col space-y-1.5 mt-1">
+                                <div class="border-b border-dashed pb-1">
+                                    ${stateHeaderHtml}
+                                    <div class="flex flex-wrap items-center text-[11px] text-gray-400 gap-x-2">
+                                        <span class="font-bold text-slate-600">發布人員:${ho.creator}</span>
+                                        <span>➔</span>
+                                        <span class="font-bold text-indigo-600">接收指名:${ho.assignee}</span>
+                                        <span class="font-mono ml-auto">${dateStr}</span>
+                                    </div>
+                                </div>
+                                <p class="text-slate-800 text-base font-bold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${cleanContent}</p>
+                            </div>
+                            
+                            ${imgHtml}
                         </div>
-                        
-                        ${imgHtml}
+
+                        <div id="thread_panel_${ho.id}" class="hidden border-t bg-slate-50/70 p-3 space-y-3" data-html2canvas-ignore="true">
+                            <div class="border-b pb-1 flex justify-between items-center">
+                                <span class="text-[11px] font-bold text-slate-500 tracking-wider">💬 延伸交接討論串</span>
+                            </div>
+
+                            <div class="space-y-2.5 max-h-60 overflow-y-auto pr-1" id="thread_list_${ho.id}"></div>
+
+                            <div class="bg-white p-2.5 rounded-lg border space-y-2">
+                                <textarea id="comment_input_${ho.id}" rows="2" placeholder="請輸入延伸補充內容..." class="w-full p-2 border rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-slate-400"></textarea>
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-1.5">
+                                        <input type="file" id="comment_file_${ho.id}" accept="image/*" onchange="handleCommentImageUpload(this, '${ho.id}')" class="hidden">
+                                        <button onclick="document.getElementById('comment_file_${ho.id}').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold text-[11px] border">📷 附圖</button>
+                                        <span id="comment_file_indicator_${ho.id}" class="text-[10px] text-green-600 font-bold hidden">已選圖片</span>
+                                    </div>
+                                    <button onclick="submitComment('${ho.id}')" class="bg-slate-700 hover:bg-slate-800 text-white font-bold px-3 py-1 rounded text-[11px] shadow">送出補充</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>`;
+            });
+        }
+
+        async function toggleCommentThread(handoverId) {
+            const panel = document.getElementById(`thread_panel_${handoverId}`);
+            const icon = document.getElementById(`arrow_icon_${handoverId}`);
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                icon.innerText = "▼";
+                await loadComments(handoverId);
+            } else {
+                panel.classList.add('hidden');
+                icon.innerText = "▶";
+            }
+        }
+
+        async function loadComments(handoverId) {
+            const listContainer = document.getElementById(`thread_list_${handoverId}`);
+            listContainer.innerHTML = '<p class="text-[11px] text-gray-400 text-center py-2">載入中...</p>';
+            
+            let { data, error } = await sbClient.from('handover_comments').select('*').eq('handover_id', handoverId).order('created_at', { ascending: true });
+            if (error || !data || data.length === 0) {
+                listContainer.innerHTML = '<p class="text-[11px] text-gray-400 text-center py-2">目前尚無延伸討論內容</p>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(c => {
+                let timeText = c.created_at ? c.created_at.substring(5,16).replace('T',' ') : '';
+                if (c.updated_at) {
+                    timeText += ` (於 ${c.updated_at.substring(5,16).replace('T',' ')} 編輯)`;
+                }
+                let imgHtml = c.image_url ? `<img src="${c.image_url}" class="mt-1.5 max-h-24 object-contain rounded border shadow-sm cursor-pointer" onclick="openImageModal('${c.image_url}')">` : '';
+
+                html += `
+                    <div class="bg-white p-2 rounded-lg border shadow-xs text-xs space-y-1">
+                        <div class="flex justify-between items-center text-[10px] text-gray-400 border-b border-dashed pb-0.5 mb-1">
+                            <span class="font-bold text-slate-600">👤 ${c.creator}</span>
+                            <span>${timeText}</span>
+                        </div>
+                        <p id="comment_text_${c.id}" class="text-slate-700 font-medium whitespace-pre-wrap break-words leading-relaxed">${c.content}</p>
+                        ${imgHtml}
+                        <div class="text-right pt-1">
+                            <button onclick="openEditCommentField('${c.id}', '${handoverId}')" class="text-[10px] font-bold text-indigo-500 hover:underline">✏️ 編輯內容</button>
+                        </div>
+                    </div>`;
+            });
+            listContainer.innerHTML = html;
+            listContainer.scrollTop = listContainer.scrollHeight;
+        }
+
+        async function submitComment(handoverId) {
+            const textarea = document.getElementById(`comment_input_${handoverId}`);
+            const content = textarea.value.trim();
+            if (!content) return alert("請輸入補充內容");
+
+            let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+            
+            let { error } = await sbClient.from('handover_comments').insert([{
+                handover_id: handoverId, content: content, creator: loggedInUser, image_url: tempCommentImageBase64, created_at: ts
+            }]);
+
+            if (error) {
+                alert("發布失敗：" + error.message);
+            } else {
+                textarea.value = '';
+                tempCommentImageBase64 = "";
+                document.getElementById(`comment_file_indicator_${handoverId}`).classList.add('hidden');
+                await loadComments(handoverId);
+            }
+        }
+
+        function openEditCommentField(commentId, handoverId) {
+            const p = document.getElementById(`comment_text_${commentId}`);
+            const originalText = p.innerText;
+            p.innerHTML = `
+                <textarea id="edit_input_${commentId}" class="w-full p-1 border rounded text-xs leading-relaxed whitespace-pre-wrap" rows="2">${originalText}</textarea>
+                <div class="flex justify-end gap-1.5 mt-1">
+                    <button onclick="loadComments('${handoverId}')" class="px-1.5 py-0.5 bg-gray-100 border text-[10px] rounded">取消</button>
+                    <button onclick="saveEditedComment('${commentId}', '${handoverId}')" class="px-1.5 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded shadow">儲存</button>
+                </div>`;
+        }
+
+        async function saveEditedComment(commentId, handoverId) {
+            const newContent = document.getElementById('edit_input_' + commentId).value.trim();
+            if (!newContent) return alert("內容不能為空");
+
+            let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+
+            let { error } = await sbClient.from('handover_comments').update({ content: newContent, updated_at: ts }).eq('id', commentId);
+            if (error) alert("更新失敗");
+            await loadComments(handoverId);
+        }
+
+        async function archiveHandover(id) {
+            if(!confirm("確定要將這筆工作交接單結案嗎？\n(結案後看板將不再顯示，但資料會完整留存備查)")) return;
+            let { error } = await sbClient.from('handovers').update({ status: '已結案' }).eq('id', id);
+            if (error) alert("結案失敗：" + error.message);
+            loadMainData();
+        }
+
+        function handleCommentImageUpload(el, handoverId) {
+            if(!el.files[0]) return;
+            compressImage(el.files[0], 400, 400, 0.4, function(base64) {
+                tempCommentImageBase64 = base64;
+                document.getElementById(`comment_file_indicator_${handoverId}`).classList.remove('hidden');
             });
         }
 
@@ -392,7 +569,7 @@
             let content = document.getElementById('hoContent').value.trim();
             const isTrackingMode = document.getElementById('hoModeToggle').checked; 
 
-            if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網網頁");
+            if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網頁");
             if(!assignee) return alert("請選擇接收人");
             if(!content) return alert("請輸入交接內容");
 
@@ -418,7 +595,7 @@
 
             try {
                 let { error } = await sbClient.from('handovers').insert([{
-                    content: dbContent, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
+                    content: dbContent, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts, status: '進行中'
                 }]);
                 if (error) throw error;
 
@@ -453,25 +630,36 @@
             }
         }
 
-        function shareCardAsImage(cardDomId, priority) {
-            const targetCard = document.getElementById(cardDomId);
+        // 💡 修正 3：讓 html2canvas 的指定節點暫時移除限制，截圖時若討論串區塊為展開狀態，將一併完美渲染成大張圖檔
+        function shareCardAsImage(outerCardDomId, priority) {
+            const targetCard = document.getElementById(outerCardDomId);
             if (!targetCard) return;
+
+            // 取得該卡片內部的討論串面板，暫時在截圖期間放行 RLS 顯示
+            const threadPanel = targetCard.querySelector('[id^="thread_panel_"]');
+            let originalIgnoreAttr = null;
+            if (threadPanel && !threadPanel.classList.contains('hidden')) {
+                // 如果討論串目前是展開狀態，暫時移除 html2canvas-ignore 以便納入截圖
+                threadPanel.removeAttribute('data-html2canvas-ignore');
+                originalIgnoreAttr = true;
+            }
 
             html2canvas(targetCard, {
                 scale: 2,          
                 useCORS: true,      
-                backgroundColor: null 
+                backgroundColor: "#FFFFFF" // 固定底色以利延伸區呈現
             }).then(canvas => {
+                // 還原屬性標記維持原架構
+                if (originalIgnoreAttr && threadPanel) {
+                    threadPanel.setAttribute('data-html2canvas-ignore', 'true');
+                }
+
                 canvas.toBlob(blob => {
                     if (!blob) return alert("圖像轉換失敗！");
-                    
                     const imageFile = new File([blob], `仕罡印刷_工作交接單_${priority}.png`, { type: 'image/png' });
 
                     if (navigator.canShare && navigator.canShare({ files: [imageFile] })) {
-                        navigator.share({
-                            files: [imageFile],
-                            title: `仕罡印刷 - 工作交接單 [${priority}]`
-                        })
+                        navigator.share({ files: [imageFile], title: `仕罡印刷 - 工作交接單 [${priority}]` })
                         .then(() => console.log('真實卡片圖片分享成功！'))
                         .catch(err => console.log('分享取消或中斷：', err));
                     } else {
@@ -482,7 +670,7 @@
         }
 
         async function deleteHandover(id) {
-            if(!confirm("確定要刪除/結案這筆交接事項嗎？")) return;
+            if(!confirm("確定要徹底物理刪除這筆交接事項嗎？")) return;
             await sbClient.from('handovers').delete().eq('id', id);
             loadMainData();
         }
