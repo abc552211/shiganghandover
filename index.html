@@ -84,6 +84,7 @@
 
     <div id="viewImageModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden flex items-center justify-center p-4" onclick="closeModal('viewImageModal')">
         <div class="relative max-w-4xl max-h-[90vh] bg-white p-1 rounded-xl shadow-2xl" onclick="event.stopPropagation()">
+            <button onclick="closeModal('viewImageModal')" class="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-md z-10">&times;</button>
             <img id="largeImageTarget" class="max-w-full max-h-[85vh] object-contain rounded-lg" src="">
         </div>
     </div>
@@ -93,7 +94,6 @@
         const SUPABASE_KEY = "sb_publishable_MIbXBy5UrRMMDwcYIaaQbA_1YWEleuK";
         const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // 更改為您的 Google Apps Script 佈署網址
         const GAS_LINE_API = "https://script.google.com/macros/s/AKfycbwBImtScXqfsZ5q-ik5cqjgGvAGq3yNecD3_QvKBOw70OSoIsETlSuYWYi1aiDoeHhG/exec"; 
 
         let hoImageBase64 = ""; 
@@ -105,20 +105,14 @@
             loadMainData();
         };
 
-        // 智慧大數據串接：撈取 Supabase 員工清單並生成表單下拉選單
-        async function  fetchUsersFromSupabase() {
+        async function fetchUsersFromSupabase() {
             let { data, error } = await sbClient.from('users_auth').select('emp_name, is_visible');
             if (error) return [];
             return (data || []).filter(u => u.is_visible !== '否').map(u => u.emp_name);
         }
 
-        async function filterCustomMat() {
-            // 保留空函式相容原始碼
-        }
-
-        async function loadSystem() {
-             refreshSystem();
-        }
+        async function filterCustomMat() {}
+        async function loadSystem() { refreshSystem(); }
 
         async function fetchHandoversFromSupabase() {
              let { data, error } = await sbClient.from('handovers').select('*').order('created_at', { ascending: false });
@@ -162,23 +156,40 @@
                 if(ho.priority === '高') { bg = 'bg-red-50/50 border-red-200'; badge = 'bg-red-500'; }
                 else if(ho.priority === '中') { bg = 'bg-yellow-50/50 border-yellow-200'; badge = 'bg-yellow-500'; }
 
-                let imgHtml = ho.image_url ? `<div class="flex-shrink-0 ml-3"><img src="${ho.image_url}" class="w-14 h-14 object-cover rounded-lg border cursor-pointer" onclick="openImageModal('${ho.image_url}')"></div>` : '';
+                // 📸 獨立將圖片區塊移至卡片下方底部，完全不干擾右上角的按鈕
+                let imgHtml = ho.image_url ? `<div class="mt-3 pt-2 border-t border-gray-100 flex justify-start"><img src="${ho.image_url}" class="w-20 h-20 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90 transition" onclick="openImageModal('${ho.image_url}')"></div>` : '';
                 let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
 
+                let safeContent = encodeURIComponent(ho.content);
+                let safeCreator = encodeURIComponent(ho.creator);
+                let safeAssignee = encodeURIComponent(ho.assignee);
+
                 container.innerHTML += `
-                    <div class="p-4 rounded-xl border ${bg} flex items-center justify-between shadow-sm handover-card">
-                        <div class="min-w-0 flex-1 flex flex-col space-y-1.5">
-                            <div class="flex flex-wrap items-center text-[11px] text-gray-400 gap-x-2">
-                                <span class="px-1.5 py-0.5 rounded text-white font-bold ${badge}">${ho.priority}</span>
-                                <span class="font-bold text-slate-700">發布:${ho.creator}</span>
-                                <span>➔</span>
-                                <span class="font-bold text-indigo-600">接收:${ho.assignee}</span>
-                                <span class="font-mono">${dateStr}</span>
-                            </div>
-                            <p class="text-gray-700 text-sm whitespace-pre-wrap break-words leading-relaxed">${ho.content}</p>
+                    <div class="p-4 rounded-xl border ${bg} flex flex-col shadow-sm relative pt-7 handover-card">
+                        <div class="absolute top-1.5 left-2 flex items-center gap-1">
+                            <span class="px-1.5 py-0.5 rounded text-white font-bold text-[10px] ${badge}">${ho.priority}</span>
+                            <button onclick="deleteHandover('${ho.id}')" class="text-gray-400 hover:text-red-500 font-bold text-sm bg-gray-100 hover:bg-gray-200 px-1.5 py-0.2 rounded border shadow-sm transition" title="結案刪除">
+                                結案 ✕
+                            </button>
                         </div>
+
+                        <div class="absolute top-1.5 right-2">
+                            <button onclick="shareToLine('${safeCreator}', '${safeAssignee}', '${ho.priority}', '${safeContent}')" class="text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 font-bold text-xs px-2 py-0.5 rounded border shadow-sm transition flex items-center gap-0.5" title="同步傳送至 LINE">
+                                🔁 轉發 LINE
+                            </button>
+                        </div>
+
+                        <div class="w-full flex flex-col space-y-2 mt-1">
+                            <div class="flex flex-wrap items-center text-[11px] text-gray-400 gap-x-2 border-b border-dashed pb-1">
+                                <span class="font-bold text-slate-600">發布人員:${ho.creator}</span>
+                                <span>➔</span>
+                                <span class="font-bold text-indigo-600">接收指名:${ho.assignee}</span>
+                                <span class="font-mono ml-auto">${dateStr}</span>
+                            </div>
+                            <p class="text-slate-800 text-base font-semibold whitespace-pre-wrap break-words leading-relaxed tracking-wide">${ho.content}</p>
+                        </div>
+                        
                         ${imgHtml}
-                        <button onclick="deleteHandover('${ho.id}')" class="text-gray-300 hover:text-red-500 text-2xl ml-3 font-light">&times;</button>
                     </div>`;
             });
         }
@@ -197,13 +208,11 @@
             let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
 
             try {
-                // 1. 寫入 Supabase 交接主表
                 let { error } = await sbClient.from('handovers').insert([{
                     content: content, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
                 }]);
                 if (error) throw error;
 
-                // 2. 觸發 GAS 進行 LINE 專向推播 (不卡同步背景執行)
                 fetch(GAS_LINE_API, {
                     method: "POST",
                     mode: "no-cors",
@@ -220,6 +229,24 @@
             } finally {
                 btn.disabled = false; btn.innerText = "發布並 LINE 推播";
             }
+        }
+
+        function shareToLine(creatorEnc, assigneeEnc, priority, contentEnc) {
+            const creator = decodeURIComponent(creatorEnc);
+            const assignee = decodeURIComponent(assigneeEnc);
+            const content = decodeURIComponent(contentEnc);
+
+            if(!confirm(`確定要將此筆 [${priority}級] 交接通知重新轉發給 [${assignee}] 嗎？`)) return;
+
+            fetch(GAS_LINE_API, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: content
+                })
+            });
+            alert("🔁 LINE 轉發請求已送出！");
         }
 
         async function deleteHandover(id) {
