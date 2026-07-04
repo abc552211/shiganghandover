@@ -113,14 +113,14 @@
                     </label>
                 </div>
 
-                <div id="dateTimeFieldsBlock" class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-gray-200">
-                    <div>
+                <div id="dateTimeFieldsBlock" class="flex flex-col sm:flex-row gap-3 bg-slate-50 p-3 rounded-lg border border-gray-200">
+                    <div class="w-full">
                         <label class="block text-gray-700 font-bold mb-1">📅 指定處理日期</label>
-                        <input type="date" id="hoTargetDate" class="w-full p-2 border rounded-lg text-sm bg-white">
+                        <input type="date" id="hoTargetDate" class="w-full p-2.5 border rounded-lg text-sm bg-white">
                     </div>
-                    <div>
+                    <div class="w-full">
                         <label class="block text-gray-700 font-bold mb-1">⏱️ 指定處理時間</label>
-                        <select id="hoTargetTime" class="w-full p-2 border rounded-lg text-sm bg-white"></select>
+                        <select id="hoTargetTime" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
                     </div>
                 </div>
 
@@ -326,7 +326,6 @@
                     } catch(e){}
                 }
 
-                // ✂️ 【關鍵優化】在前端渲染畫面時，把用來提供給 LINE 點擊的日曆網址過濾掉，維持看板版面純淨
                 let cleanContent = ho.content;
                 if (cleanContent.includes("📅點擊加入行事曆：")) {
                     cleanContent = cleanContent.split("📅點擊加入行事曆：")[0].trim();
@@ -388,7 +387,6 @@
                 const gCalDate = displayTime.replace(/[- :]/g, '').substring(0, 12) + "00"; 
                 const gCalLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('仕罡印刷-交接待辦項目')}&dates=${gCalDate}/${gCalDate}&details=${encodeURIComponent(content)}`;
                 
-                // 數據庫與 LINE 分流：網址只留給 LINE 推播，看板主體保持乾淨
                 dbContent = `⏰【預計處理時間：${displayTime}】\n-------------------------\n${content}`;
                 lineContent = `${dbContent}\n\n📅點擊加入行事曆：${gCalLink}`;
             } else {
@@ -400,13 +398,11 @@
             let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
 
             try {
-                // 1. 寫入 Supabase (存入乾淨的 dbContent)
                 let { error } = await sbClient.from('handovers').insert([{
                     content: dbContent, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts
                 }]);
                 if (error) throw error;
 
-                // 2. LINE 推播分流 (送出帶有行事曆網址的 lineContent)
                 if (assignee === "全員") {
                     userListCache.forEach(targetEmployee => {
                         fetch(GAS_LINE_API, {
@@ -502,7 +498,7 @@
             });
         }
 
-        function handleImageUpload(el) {
+        fn = handleImageUpload = (el) => {
             if(!el.files[0]) return;
             compressImage(el.files[0], 400, 400, 0.4, function(base64) {
                 hoImageBase64 = base64;
