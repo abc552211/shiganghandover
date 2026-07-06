@@ -102,14 +102,21 @@
                     </div>
                 </div>
                 <div>
-                    <label class="block text-gray-600 font-bold mb-1">指定接收人 (自動連動 LINE 專向推播)</label>
-                    <select id="hoAssignee" class="w-full p-2.5 border rounded-lg text-sm bg-white"></select>
+                    <label class="block text-gray-600 font-bold mb-2">指定接收人 (自動連動 LINE 專向推播)</label>
+                    <div class="mb-2">
+                        <label class="inline-flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer border hover:bg-slate-200 transition">
+                         <input type="checkbox" id="hoAssignAll" checked onchange="toggleHandoverAssignAll(this)" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500">
+                           <span class="text-xs font-bold text-slate-700">📢 廣播給全體在職人員</span>
+                       </label>
+                    </div>
+                 <div id="hoAssigneeGridContainer" class="hidden p-3 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
+                     </div>
                 </div>
                 
                 <div class="flex items-center gap-2 bg-amber-50/50 border border-amber-200/60 p-2.5 rounded-lg">
                     <input type="checkbox" id="hoSkipLineNotify" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500 cursor-pointer">
                     <label for="hoSkipLineNotify" class="text-xs text-amber-900 font-bold cursor-pointer select-none">
-                        🤫 靜音模式:勾選後Line不會推播。
+                        🤫 此單僅上傳看板，勾選 [不推播] 至 LINE 通知
                     </label>
                 </div>
                 
@@ -197,11 +204,61 @@
             document.getElementById('authEmpName').innerHTML = opts;
         }
 
-        function buildAssigneeDropdown() {
-            let assigneeOpts = '<option value="全員">全員 (群體廣播)</option>';
-            userListCache.forEach(name => assigneeOpts += `<option value="${name}">${name}</option>`);
-            document.getElementById('hoAssignee').innerHTML = assigneeOpts;
-        }
+        // [追加] 全員勾選狀態連動控制開關
+window.toggleHandoverAssignAll = function(el) {
+    const gridContainer = document.getElementById('hoAssigneeGridContainer');
+    if (el.checked) {
+        gridContainer.classList.add('hidden');
+    } else {
+        gridContainer.classList.remove('hidden');
+    }
+};
+
+// [重構] 改為動態載入多選人員網格
+function buildAssigneeDropdown() {
+    const gridContainer = document.getElementById('hoAssigneeGridContainer');
+    if (gridContainer) {
+        let cbHtml = '';
+        userListCache.forEach(name => {
+            if (name && !name.startsWith('(離)')) {
+                cbHtml += `
+                    <label class="flex items-center gap-1.5 p-1 hover:bg-white rounded cursor-pointer select-none">
+                        <input type="checkbox" value="${name}" class="ho-individual-assignee-cb w-3.5 h-3.5 text-indigo-600 rounded">
+                        <span class="text-xs text-gray-700 font-medium">${name}</span>
+                    </label>`;
+            }
+        });
+        gridContainer.innerHTML = cbHtml || '<span class="text-gray-400 col-span-3">暫無其他可用在職同仁</span>';
+    }
+}
+
+// [重構] 開啟彈窗時初始化多選面板狀態
+function openHandoverModal() {
+    document.getElementById('hoContent').value = ''; 
+    document.getElementById('hoCreator').value = loggedInUser;
+    document.getElementById('hoImage').value = '';
+    document.getElementById('hoImagePreview').classList.add('hidden'); 
+    hoImageBase64 = "";
+    
+    // 預設重置為全員公告
+    const assignAllCb = document.getElementById('hoAssignAll');
+    if (assignAllCb) assignAllCb.checked = true;
+    
+    const gridContainer = document.getElementById('hoAssigneeGridContainer');
+    if (gridContainer) gridContainer.classList.add('hidden');
+    
+    // 重新繪製目前最新的在職人員 Checkbox
+    buildAssigneeDropdown();
+
+    document.getElementById('hoModeToggle').checked = false; 
+    if(document.getElementById('hoSkipLineNotify')) {
+        document.getElementById('hoSkipLineNotify').checked = false;
+    }
+    
+    handleModeToggleChange();
+    buildTargetTimeOptions(); 
+    document.getElementById('handoverModal').classList.remove('hidden');
+}
 
         // 💡 修正 1：將指定日期生成範圍由 7 天擴增至 30 天
         function buildTargetTimeOptions() {
@@ -565,78 +622,117 @@
             });
         }
 
-        // 💡 修正 3：加入 skipLineNotify 控制邏輯，勾選不推播時繞過 LINE 發送
         async function submitHandover(btn) {
-            const priority = document.getElementById('hoPriority').value;
-            const creator = document.getElementById('hoCreator').value;
-            const assignee = document.getElementById('hoAssignee').value;
-            let content = document.getElementById('hoContent').value.trim();
-            const isTrackingMode = document.getElementById('hoModeToggle').checked; 
-            const skipLineNotify = document.getElementById('hoSkipLineNotify').checked;
-
-            if(!creator) return alert("系統未能順利獲取您的發布身分，請嘗試重新整理網頁");
-            if(!assignee) return alert("請選擇接收人");
-            if(!content) return alert("請輸入交接內容");
-
-            let dbContent = "";
-            let lineContent = "";
-
-            if (!isTrackingMode) {
-                const targetDate = document.getElementById('hoTargetDate').value;
-                const targetTime = document.getElementById('hoTargetTime').value;
-                const displayTime = `${targetDate} ${targetTime}`;
-                const gCalDate = displayTime.replace(/[- :]/g, '').substring(0, 12) + "00"; 
-                const gCalLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('仕罡印刷-交接待辦項目')}&dates=${gCalDate}/${gCalDate}&details=${encodeURIComponent(content)}`;
-                
-                dbContent = `⏰【預計處理時間：${displayTime}】\n-------------------------\n${content}`;
-                lineContent = `${dbContent}\n\n📅點擊加入行事曆：${gCalLink}`;
-            } else {
-                dbContent = `📌【追蹤工作單：未結案前持續掛載】\n-------------------------\n${content}`;
-                lineContent = dbContent;
-            }
-
-            btn.disabled = true; btn.innerText = "傳送中...";
-            let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
-
-            try {
-                let { error } = await sbClient.from('handovers').insert([{
-                    content: dbContent, priority: priority, creator: creator, assignee: assignee, image_url: hoImageBase64, created_at: ts, status: '進行中'
-                }]);
-                if (error) throw error;
-
-                // 若「未勾選」不推播，才執行 LINE API 發送
-                if (!skipLineNotify) {
-                    if (assignee === "全員") {
-                        userListCache.forEach(targetEmployee => {
-                            fetch(GAS_LINE_API, {
-                                method: "POST",
-                                mode: "no-cors",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                    action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: lineContent
-                                })
-                            });
-                        });
-                    } else {
-                        fetch(GAS_LINE_API, {
-                            method: "POST",
-                            mode: "no-cors",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                action: "sendNotification", creator: creator, assignee: assignee, priority: priority, content: lineContent
-                            })
-                        });
-                    }
-                }
-
+    const content = document.getElementById('hoContent').value.trim();
+    const priority = document.getElementById('hoPriority').value;
+    const creator = document.getElementById('hoCreator').value;
+    
+    // 安全防呆：檢查靜音勾選框是否存在
+    const skipLineEl = document.getElementById('hoSkipLineNotify');
+    const skipLine = skipLineEl ? skipLineEl.checked : false;
+    
+    if (!content) return alert("請輸入交接具體內容事項！");
+    
+    // 【👑 核心修復點】修正對應新版 HTML 網格結構，移除舊有 hoAssignee.value 錯誤
+    let finalAssigneeText = "全員";
+    const assignAllCb = document.getElementById('hoAssignAll');
+    
+    // 若沒有勾選「全體廣播」，才去抓取網格內被勾選的人員名字
+    if (assignAllCb && !assignAllCb.checked) {
+        const checkedBoxes = document.querySelectorAll('.ho-individual-assignee-cb:checked');
+        const selectedNames = Array.from(checkedBoxes).map(cb => cb.value);
+        if (selectedNames.length === 0) return alert("請至少勾選指名一位接收同仁，或切換為全員廣播！");
+        finalAssigneeText = selectedNames.join(', '); // 合併成單一字串，只產生一張卡片
+    }
+    
+    let dbContent = "";
+    let lineContent = "";
+    const isTrackingMode = document.getElementById('hoModeToggle').checked;
+    
+    if (!isTrackingMode) {
+        const targetDate = document.getElementById('hoTargetDate').value;
+        const targetTime = document.getElementById('hoTargetTime').value;
+        const displayTime = `${targetDate} ${targetTime}`;
+        const gCalDate = displayTime.replace(/[- :]/g, '').substring(0, 12) + "00"; 
+        const gCalLink = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('仕罡印刷-交接待辦項目')}&dates=${gCalDate}/${gCalDate}&details=${encodeURIComponent(content)}`;
+        
+        dbContent = `⏰【預計處理時間：${displayTime}】\n----------------------------------------\n${content}`;
+        lineContent = `${dbContent}\n\n📅點擊加入行事曆：${gCalLink}`;
+    } else {
+        dbContent = `📌【追蹤工作單：日常交辦與跟進】\n----------------------------------------\n${content}`;
+        lineContent = dbContent;
+    }
+    
+    btn.disabled = true;
+    btn.innerText = "傳送中...";
+    
+    let d = new Date();
+    let ts = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString();
+    
+    // 自動判斷目前是 A 程式環境還是 B 程式環境
+    const isAApp = (typeof google !== 'undefined' && google.script && google.script.run);
+    
+    try {
+        if (isAApp) {
+            // --- A 程式 (呼叫 Google Script) ---
+            google.script.run.withSuccessHandler(res => {
+                showCustomAlert("發布成功", `工作交接單已成功派發至看板！\n指名對象：[${finalAssigneeText}]`);
                 closeModal('handoverModal');
-                loadMainData();
-            } catch(e) {
-                alert("發布失敗：" + e.message);
-            } finally {
+                refreshSystem();
                 btn.disabled = false; btn.innerText = "發布並 LINE 推播";
-            }
+                
+                // 智慧拆分推播
+                if (!skipLine) sendLineNotifyBatch(creator, finalAssigneeText, priority, lineContent);
+            }).withFailureHandler(err => {
+                alert("發布失敗：" + err);
+                btn.disabled = false; btn.innerText = "發布並 LINE 推播";
+            }).addHandover(dbContent, priority, finalAssigneeText, hoImageBase64, creator);
+            
+        } else {
+            // --- B 程式 (直連 Supabase) ---
+            let { error } = await sbClient.from('handovers').insert([{
+                content: dbContent, priority: priority, creator: creator, assignee: finalAssigneeText, image_url: hoImageBase64 || "", created_at: ts, status: '進行中'
+            }]);
+            if (error) throw error;
+            
+            await sbClient.from('handovers_log').insert([{ created_at: ts, action: '新增', content: `發布給[${finalAssigneeText}]: ${content.substring(0, 20)}...`, operator_name: creator }]);
+            
+            closeModal('handoverModal');
+            loadMainData();
+            
+            // 智慧拆分推播
+            if (!skipLine) sendLineNotifyBatch(creator, finalAssigneeText, priority, lineContent);
         }
+    } catch(e) {
+        alert("發布失敗：" + e.message);
+    } finally {
+        if (!isAApp) { btn.disabled = false; btn.innerText = "發布並 LINE 推播"; }
+    }
+}
+        // [追加] 支援單張小卡、多同仁手機同時推播的 LINE 批次發送引擎
+function sendLineNotifyBatch(creator, assigneeText, priority, lineContent) {
+    if (assigneeText === "全員") {
+        window.userListCache.forEach(targetEmployee => {
+            if (targetEmployee && !targetEmployee.startsWith('(離)')) {
+                fetch(GAS_LINE_API, {
+                    method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: lineContent })
+                });
+            }
+        });
+    } else {
+        // 如果有多個名字（以逗號分隔），自動切開並對每個人發送專向推播
+        const individualNames = assigneeText.split(',').map(name => name.trim());
+        individualNames.forEach(targetEmployee => {
+            if (targetEmployee) {
+                fetch(GAS_LINE_API, {
+                    method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "sendNotification", creator: creator, assignee: targetEmployee, priority: priority, content: lineContent })
+                });
+            }
+        });
+    }
+}
 
         function shareCardAsImage(outerCardDomId, priority) {
             const targetCard = document.getElementById(outerCardDomId);
@@ -737,17 +833,6 @@
             reader.readAsDataURL(file);
         }
 
-        function openHandoverModal() {
-            document.getElementById('hoContent').value = ''; 
-            document.getElementById('hoCreator').value = loggedInUser;
-            document.getElementById('hoAssignee').value = '全員'; document.getElementById('hoImage').value = '';
-            document.getElementById('hoImagePreview').classList.add('hidden'); hoImageBase64 = "";
-            document.getElementById('hoModeToggle').checked = false; 
-            document.getElementById('hoSkipLineNotify').checked = false; // 💡 重置不推播狀態
-            handleModeToggleChange();
-            buildTargetTimeOptions(); 
-            document.getElementById('handoverModal').classList.remove('hidden');
-        }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
         function openImageModal(src) { document.getElementById('largeImageTarget').src = src; document.getElementById('viewImageModal').classList.remove('hidden'); }
     </script>
