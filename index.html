@@ -429,10 +429,12 @@ function openHandoverModal() {
                         }
                     } catch(e){}
                 }
-
-                let deleteBtnHtml = (loggedInUser === ho.creator || loggedInUser === ho.assignee || ho.assignee === "全員") ? `
+                let assigneeStr = String(ho.assignee || '');
+                // 切開字串判定當前登入者 loggedInUser 是否在複數接收人陣列內
+                let isAssigneeInclude = assigneeStr.split(',').map(name => name.trim()).includes(loggedInUser);
+                let deleteBtnHtml = (loggedInUser === ho.creator || isAssigneeInclude || assigneeStr === "全員" || assigneeStr.includes("全員")) ? `
                     <button data-html2canvas-ignore="true" onclick="archiveHandover('${ho.id}')" class="text-red-600 hover:bg-red-100 font-bold text-[10px] bg-white px-1.5 py-0.5 rounded border shadow-sm transition ml-1">
-                        安全結案 ✓
+                    結案 ✓
                     </button>` : '';
 
                 let cleanContent = ho.content;
