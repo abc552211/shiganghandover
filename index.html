@@ -553,17 +553,16 @@ function openHandoverModal() {
                             ${imgHtml}
                         </div>
 
-                                                <div class="flex items-center justify-between px-4 py-2.5 bg-slate-50/50 border-t border-gray-100" data-html2canvas-ignore="true">
-                            <div class="flex items-center gap-2">
-                                ${likeBtnHtml}
-                                <div title="留言數量" class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-gray-400 border border-gray-200 cursor-help">
-                                    <span class="text-sm">💬</span><span class="text-xs font-bold">${ho.commentCount || 0}</span>
-                                </div>
-                            </div>
-                            <button onclick="toggleCommentThread('${ho.id}', '${ho.status}')" id="arrow_icon_${ho.id}" class="flex items-center gap-1 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 rounded-md transition-colors text-xs font-bold shadow-sm">
-                                展開討論 ▶
-                            </button>
-                        </div>
+                        <div class="flex items-center px-4 py-2.5 bg-slate-50/50 border-t border-gray-100 rounded-b-xl gap-2" data-html2canvas-ignore="true">
+    ${likeBtnHtml}
+    
+    <!-- 合併後的留言與展開按鈕 -->
+    <button onclick="toggleCommentThread('${ho.id}')" id="btn_comment_${ho.id}" title="點擊展開/收合討論" class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white hover:bg-indigo-50 text-gray-500 border border-gray-200 cursor-pointer transition-colors shadow-sm font-bold">
+        <span class="text-sm">💬</span>
+        <span class="text-xs">${ho.commentCount || 0}</span>
+        <span id="arrow_icon_${ho.id}" class="text-[10px] ml-0.5 text-gray-400 transition-transform">▼</span>
+    </button>
+</div>                        
 
                                                 <div id="thread_panel_${ho.id}" class="hidden border-t bg-slate-50/70 p-3 space-y-3" data-html2canvas-ignore="true">
                             <div class="border-b pb-1 flex justify-between items-center">
@@ -576,20 +575,41 @@ function openHandoverModal() {
             });
         }
 
-        async function toggleCommentThread(handoverId) {
-            const panel = document.getElementById(`thread_panel_${handoverId}`);
-            const icon = document.getElementById(`arrow_icon_${handoverId}`);
-            if (panel.classList.contains('hidden')) {
-                panel.classList.remove('hidden');
-                icon.innerText = "收合討論 ▼";
-                icon.classList.replace('bg-indigo-50', 'bg-indigo-100');
-                await loadComments(handoverId);
-            } else {
-                panel.classList.add('hidden');
-                icon.innerText = "展開討論 ▶";
-                icon.classList.replace('bg-indigo-100', 'bg-indigo-50');
-            }
+        window.toggleCommentThread = async function(handoverId) {
+    const panel = document.getElementById(`thread_panel_${handoverId}`);
+    const arrow = document.getElementById(`arrow_icon_${handoverId}`);
+    const btn = document.getElementById(`btn_comment_${handoverId}`);
+
+    if (panel.classList.contains('hidden')) {
+        // 展開狀態：顯示討論區，改變按鈕顏色與箭頭
+        panel.classList.remove('hidden');
+        if (arrow) arrow.innerText = "▲";
+        if (btn) {
+            btn.classList.replace('bg-white', 'bg-indigo-50');
+            btn.classList.replace('text-gray-500', 'text-indigo-600');
         }
+        
+        // 兼容兩支不同程式的呼叫方式
+        if (typeof window.loadComments === 'function') {
+            await window.loadComments(handoverId);
+        } else if (typeof loadComments === 'function') {
+            await loadComments(handoverId);
+        }
+    } else {
+        // 收合狀態：隱藏討論區，復原按鈕顏色與箭頭
+        panel.classList.add('hidden');
+        if (arrow) arrow.innerText = "▼";
+        if (btn) {
+            btn.classList.replace('bg-indigo-50', 'bg-white');
+            btn.classList.replace('text-indigo-600', 'text-gray-500');
+        }
+    }
+};
+
+// 如果是在獨立工作看板 (非 window 綁定版本)，請確保保留這行以防找不到函式：
+async function toggleCommentThread(handoverId) {
+    await window.toggleCommentThread(handoverId);
+}
         function toggleClosedSearch() {
             isShowingClosed = !isShowingClosed;
             const btn = document.getElementById('closedSearchBtn');
