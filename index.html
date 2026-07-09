@@ -92,70 +92,72 @@
             </div>
             
             <div class="p-4 space-y-4 overflow-y-auto text-xs flex-1 min-h-0 h-full scrollbar-thin">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-gray-600 font-bold mb-1">優先級別</label>
-                        <select id="hoPriority" class="w-full p-2.5 border rounded-lg text-sm bg-white">
-                            <option value="高">高 (紅色警示)</option>
-                            <option value="中" selected>中 (黃色提醒)</option>
-                            <option value="低">低 (綠色常態)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-gray-600 font-bold mb-1">交接發布人 (已鎖定)</label>
-                        <input type="text" id="hoCreator" readonly class="w-full p-2.5 border rounded-lg text-sm bg-gray-100 text-gray-500 font-bold cursor-not-allowed">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-gray-600 font-bold mb-2">指定接收人 (自動連動 LINE 專向推播)</label>
-                    <div class="mb-2">
-                        <label class="inline-flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer border hover:bg-slate-200 transition">
-                         <input type="checkbox" id="hoAssignAll" checked onchange="toggleHandoverAssignAll(this)" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500">
-                           <span class="text-xs font-bold text-slate-700">📢 廣播給全體在職人員</span>
-                       </label>
-                    </div>
-                 <div id="hoAssigneeGridContainer" class="hidden p-3 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
-                     </div>
-                </div>
-                
-                <div class="flex items-center gap-2 bg-amber-50/50 border border-amber-200/60 p-2.5 rounded-lg">
-                    <input type="checkbox" id="hoSkipLineNotify" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500 cursor-pointer">
-                    <label for="hoSkipLineNotify" class="text-xs text-amber-900 font-bold cursor-pointer select-none">
-                        🤫 此單僅上傳看板，勾選 [不推播] 至 LINE 通知
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between bg-slate-100 p-3 rounded-xl border border-gray-200">
-                    <span id="toggleStatusLabel" class="text-sm font-bold text-indigo-700 tracking-wide">📅 當前模式：指定時間</span>
-                    <label class="relative inline-flex items-center cursor-pointer select-none">
-                        <input type="checkbox" id="hoModeToggle" onchange="handleModeToggleChange()" class="sr-only peer">
-                        <div class="w-14 h-7 bg-indigo-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-6 after:transition-all peer-checked:bg-slate-500"></div>
-                    </label>
-                </div>
+    
+    <div>
+        <label class="block text-gray-600 font-bold mb-1">當前模式 (發布必選)</label>
+        <select id="hoModeSelect" onchange="handleModeSelectChange()" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-500 font-bold text-indigo-700">
+            <option value="">未選擇</option>
+            <option value="track">📌 追蹤工作</option>
+            <option value="time">📅 指定時間</option>
+        </select>
+    </div>
 
-                <div id="dateTimeFieldsBlock" class="flex flex-row gap-3 bg-slate-50 p-3 rounded-lg border border-gray-200 w-full box-border">
-                    <div class="w-1/2">
-                        <label class="block text-gray-700 font-bold mb-1 truncate">📅 指定處理日期</label>
-                        <select id="hoTargetDate" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:outline-none"></select>
-                    </div>
-                    <div class="w-1/2">
-                        <label class="block text-gray-700 font-bold mb-1 truncate">⏱️ 指定處理時間</label>
-                        <select id="hoTargetTime" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:outline-none"></select>
-                    </div>
-                </div>
+    <div id="dateTimeFieldsBlock" class="hidden flex-row gap-3 bg-slate-50 p-3 rounded-lg border border-gray-200 w-full box-border">
+        <div class="w-1/2">
+            <label class="block text-gray-700 font-bold mb-1 truncate">📅 指定處理日期</label>
+            <select id="hoTargetDate" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:outline-none"></select>
+        </div>
+        <div class="w-1/2">
+            <label class="block text-gray-700 font-bold mb-1 truncate">⏱️ 指定處理時間</label>
+            <select id="hoTargetTime" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:outline-none"></select>
+        </div>
+    </div>
 
-                <div>
-                    <label class="block text-gray-600 font-bold mb-1">交接具體內容</label>
-                    <textarea id="hoContent" rows="3" placeholder="請詳細敘述交接交代事項..." class="w-full p-2.5 border rounded-lg text-sm"></textarea>
-                </div>
-                <div>
-                    <label class="block text-gray-600 font-bold mb-1">現場附加照片</label>
-                    <input type="file" id="hoImage" accept="image/*" onchange="handleImageUpload(this)" class="w-full text-xs text-gray-500 cursor-pointer">
-                    <div class="mt-2 flex justify-center bg-gray-50 rounded-lg border border-dashed p-1">
-                        <img id="hoImagePreview" class="hidden max-h-24 object-contain p-1 rounded-lg" src="">
-                    </div>
-                </div>
-            </div>
+    <div class="grid grid-cols-2 gap-4">
+        <div>
+            <label class="block text-gray-600 font-bold mb-1">優先級別</label>
+            <select id="hoPriority" class="w-full p-2.5 border rounded-lg text-sm bg-white">
+                <option value="高">高 (紅色警示)</option>
+                <option value="中" selected>中 (黃色提醒)</option>
+                <option value="低">低 (綠色常態)</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-gray-600 font-bold mb-1">交接發布人 (已鎖定)</label>
+            <input type="text" id="hoCreator" readonly class="w-full p-2.5 border rounded-lg text-sm bg-gray-100 text-gray-500 font-bold cursor-not-allowed">
+        </div>
+    </div>
+    
+    <div>
+        <label class="block text-gray-600 font-bold mb-2">指定接收人 (自動連動 LINE 專向推播)</label>
+        <div class="mb-2">
+            <label class="inline-flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer border hover:bg-slate-200 transition">
+                <input type="checkbox" id="hoAssignAll" checked onchange="toggleHandoverAssignAll(this)" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500">
+                <span class="text-xs font-bold text-slate-700">📢 廣播給全體在職人員</span>
+            </label>
+        </div>
+        <div id="hoAssigneeGridContainer" class="hidden p-3 border rounded-lg bg-gray-50 max-h-36 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+    </div>
+    
+    <div class="flex items-center gap-2 bg-amber-50/50 border border-amber-200/60 p-2.5 rounded-lg">
+        <input type="checkbox" id="hoSkipLineNotify" class="w-4 h-4 rounded text-slate-600 focus:ring-slate-500 cursor-pointer">
+        <label for="hoSkipLineNotify" class="text-xs text-amber-900 font-bold cursor-pointer select-none">
+            🤫 此單僅上傳看板，勾選 [不推播] 至 LINE 通知
+        </label>
+    </div>
+
+    <div>
+        <label class="block text-gray-600 font-bold mb-1">交接具體內容</label>
+        <textarea id="hoContent" rows="3" placeholder="請詳細敘述交接交代事項..." class="w-full p-2.5 border rounded-lg text-sm"></textarea>
+    </div>
+    <div>
+        <label class="block text-gray-600 font-bold mb-1">現場附加照片</label>
+        <input type="file" id="hoImage" accept="image/*" onchange="handleImageUpload(this)" class="w-full text-xs text-gray-500 cursor-pointer">
+        <div class="mt-2 flex justify-center bg-gray-50 rounded-lg border border-dashed p-1">
+            <img id="hoImagePreview" class="hidden max-h-24 object-contain p-1 rounded-lg" src="">
+        </div>
+    </div>
+</div>
             
             <div class="p-4 border-t flex justify-end gap-3 bg-gray-50 rounded-b-xl flex-shrink-0">
                 <button onclick="closeModal('handoverModal')" class="px-4 py-2 border hover:bg-gray-100 rounded-lg text-sm">取消</button>
@@ -256,12 +258,12 @@ function openHandoverModal() {
     // 重新繪製目前最新的在職人員 Checkbox
     buildAssigneeDropdown();
 
-    document.getElementById('hoModeToggle').checked = false; 
+    document.getElementById('hoModeSelect').value = ""; 
     if(document.getElementById('hoSkipLineNotify')) {
         document.getElementById('hoSkipLineNotify').checked = false;
     }
     
-    handleModeToggleChange();
+    handleModeSelectChange();
     buildTargetTimeOptions(); 
     document.getElementById('handoverModal').classList.remove('hidden');
 }
@@ -315,21 +317,18 @@ function openHandoverModal() {
             timeSelect.value = String(defH).padStart(2, '0') + ":" + String(roundedMin).padStart(2, '0');
         }
 
-        function handleModeToggleChange() {
-            const isChecked = document.getElementById('hoModeToggle').checked;
-            const label = document.getElementById('toggleStatusLabel');
-            const timeBlock = document.getElementById('dateTimeFieldsBlock');
-            
-            if (isChecked) {
-                label.innerText = "📌 當前模式：追蹤工作";
-                label.className = "text-sm font-bold text-slate-600 tracking-wide";
-                timeBlock.classList.add('hidden');
-            } else {
-                label.innerText = "📅 當前模式：指定時間";
-                label.className = "text-sm font-bold text-indigo-700 tracking-wide";
-                timeBlock.classList.remove('hidden');
-            }
-        }
+        function handleModeSelectChange() {
+    const mode = document.getElementById('hoModeSelect').value;
+    const timeBlock = document.getElementById('dateTimeFieldsBlock');
+    
+    if (mode === 'time') {
+        timeBlock.classList.remove('hidden');
+        timeBlock.classList.add('flex');
+    } else {
+        timeBlock.classList.remove('flex');
+        timeBlock.classList.add('hidden');
+    }
+}
 
         async function verifySystemAccess() {
             const empName = document.getElementById('authEmpName').value;
@@ -750,31 +749,44 @@ function openHandoverModal() {
         }
 
         async function submitHandover(btn) {
+    const modeSelect = document.getElementById('hoModeSelect');
+    const mode = modeSelect.value;
+    const modeText = modeSelect.options[modeSelect.selectedIndex].text;
+    
+    // 【防呆1】檢查是否選擇模式
+    if (!mode) return alert("❌ 防呆提醒：請先在最上方選擇「當前模式」！");
+
     const content = document.getElementById('hoContent').value.trim();
+    // 【防呆2】檢查內容
+    if (!content) return alert("請輸入交接具體內容事項！");
+
+    // 【防呆3】發送前確認彈窗 (提醒內容與模式)
+    if (!confirm(`【發送最終確認】\n\n📌 選擇模式：${modeText}\n📝 交接內容：\n${content.substring(0, 50)}${content.length > 50 ? '...' : ''}\n\n確定無誤要發出嗎？`)) {
+        return;
+    }
+
     const priority = document.getElementById('hoPriority').value;
     const creator = document.getElementById('hoCreator').value;
     
-    // 安全防呆：檢查靜音勾選框是否存在
     const skipLineEl = document.getElementById('hoSkipLineNotify');
     const skipLine = skipLineEl ? skipLineEl.checked : false;
     
-    if (!content) return alert("請輸入交接具體內容事項！");
-    
-    // 【👑 核心修復點】修正對應新版 HTML 網格結構，移除舊有 hoAssignee.value 錯誤
     let finalAssigneeText = "全員";
     const assignAllCb = document.getElementById('hoAssignAll');
     
-    // 若沒有勾選「全體廣播」，才去抓取網格內被勾選的人員名字
     if (assignAllCb && !assignAllCb.checked) {
         const checkedBoxes = document.querySelectorAll('.ho-individual-assignee-cb:checked');
         const selectedNames = Array.from(checkedBoxes).map(cb => cb.value);
         if (selectedNames.length === 0) return alert("請至少勾選指名一位接收同仁，或切換為全員廣播！");
-        finalAssigneeText = selectedNames.join(', '); // 合併成單一字串，只產生一張卡片
+        finalAssigneeText = selectedNames.join(', ');
     }
     
     let dbContent = "";
     let lineContent = "";
-    const isTrackingMode = document.getElementById('hoModeToggle').checked;
+    // 改為偵測下拉選單
+    const isTrackingMode = (mode === 'track'); 
+
+    // ... 下面保持 100% 原本的 if (!isTrackingMode) { ... 邏輯不變
     
     if (!isTrackingMode) {
         const targetDate = document.getElementById('hoTargetDate').value;
