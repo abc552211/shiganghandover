@@ -444,7 +444,7 @@ function openHandoverModal() {
                         <img src="${ho.image_url}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border shadow-sm cursor-pointer hover:opacity-90 transition" onclick="openImageModal('${ho.image_url}')">
                     </div>` : '';
                     
-                let dateStr = ho.created_at ? ho.created_at.substring(0,16).replace('T',' ') : '';
+                let dateStr = ho.created_at ? new Date(new Date(ho.created_at).getTime() + (8 * 3600000)).toISOString().substring(0, 16).replace('T', ' ') : '';
                 let outerCardDomId = `outer_card_${ho.id}`;
 
                 let expiryAlertHtml = '';
@@ -684,9 +684,9 @@ async function toggleCommentThread(handoverId) {
 
             let html = '';
             data.forEach(c => {
-                let timeText = c.created_at ? c.created_at.substring(5,16).replace('T',' ') : '';
+                let timeText = c.created_at ? new Date(new Date(c.created_at).getTime() + (8 * 3600000)).toISOString().substring(5, 16).replace('T', ' ') : '';
                 if (c.updated_at) {
-                    timeText += ` (於 ${c.updated_at.substring(5,16).replace('T',' ')} 編輯)`;
+                    timeText += ` (於 ${new Date(new Date(c.updated_at).getTime() + (8 * 3600000)).toISOString().substring(5, 16).replace('T', ' ')} 編輯)`;
                 }
                 let imgHtml = c.image_url ? `<img src="${c.image_url}" class="mt-1.5 max-h-24 object-contain rounded border shadow-sm cursor-pointer" onclick="openImageModal('${c.image_url}')">` : '';
 
@@ -715,7 +715,7 @@ async function toggleCommentThread(handoverId) {
             const content = textarea.value.trim();
             if (!content) return alert("請輸入補充內容");
 
-            let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+            let ts = new Date().toISOString();
             
             let { error } = await sbClient.from('handover_comments').insert([{
                 handover_id: handoverId, content: content, creator: loggedInUser, image_url: tempCommentImageBase64, created_at: ts
@@ -746,7 +746,7 @@ async function toggleCommentThread(handoverId) {
             const newContent = document.getElementById('edit_input_' + commentId).value.trim();
             if (!newContent) return alert("內容不能為空");
 
-            let ts = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString();
+            let ts = new Date().toISOString();
 
             let { error } = await sbClient.from('handover_comments').update({ content: newContent, updated_at: ts }).eq('id', commentId);
             if (error) alert("更新失敗");
@@ -825,8 +825,7 @@ async function toggleCommentThread(handoverId) {
     btn.disabled = true;
     btn.innerText = "傳送中...";
     
-    let d = new Date();
-    let ts = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString();
+    let ts = new Date().toISOString();
     
     // 自動判斷目前是 A 程式環境還是 B 程式環境
     const isAApp = (typeof google !== 'undefined' && google.script && google.script.run);
