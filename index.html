@@ -870,7 +870,8 @@ async function toggleCommentThread(handoverId) {
         // [追加] 支援單張小卡、多同仁手機同時推播的 LINE 批次發送引擎
 function sendLineNotifyBatch(creator, assigneeText, priority, lineContent) {
     if (assigneeText === "全員") {
-        window.userListCache.forEach(targetEmployee => {
+        // [修復] 移除 window. 前綴，直接使用全域變數 userListCache，解決 undefined 崩潰錯誤
+        userListCache.forEach(targetEmployee => {
             if (targetEmployee && !targetEmployee.startsWith('(離)')) {
                 fetch(GAS_LINE_API, {
                     method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" },
